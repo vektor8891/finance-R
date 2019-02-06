@@ -47,9 +47,9 @@ check.column <- function(dataAll, dataCurrent, fileName, colName) {
 
 year <- 2019
 
-fileBluecoins <- "input/transactions_list_table.csv"
 fileIncomeCat <- "input/income_categories.csv"
 fileBalanceCat <- "input/balance_categories.csv"
+fileBluecoins <- "reports/transactions_list_table.csv"
 
 dataInc <- fread(fileIncomeCat)
 dataBal <- fread(fileBalanceCat, dec = ",")
