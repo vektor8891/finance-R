@@ -1,0 +1,7 @@
+[0m[0K]0;:/c/Users/Viktor/Dropbox/Finance[?25l
+[0;32mViktor@Viktor-PC [0;35m [0;33m~/Dropbox/Finance[0m[0K
+$ BlueCoinsData <- read.csv(file = "input/transactions_list_table.csv",[0K
+bash: syntax error near unexpected token `('[0K
+[0K[?25h[?25l
+[0;32mViktor@Viktor-PC [0;35m [0;33m~/Dropbox/Finance[0m[0K
+$[0K[3G[?25h
