@@ -1,4 +1,3 @@
-# TODO: add month to dataframe
 # TODO: create pivot report for categories
 # TODO: create pivot report for accounts
 # TODO: save pivot reports to csv
@@ -20,11 +19,12 @@ read.bluecoins <- function(fileName, year) {
   dataBC <- dataBC[Category == "(Átvezetés)", Category := "Transfer" ]
   dataBC <- dataBC[Account == "Unicredit", Account := "V.Uni" ]
   dataBC <- dataBC[, Date := sapply(Date, function(x) (substr(x, 1, 10)))]
+  dataBC <- dataBC[, Month := sapply(Date, function(x) (strtoi(substr(x, 6, 7))))]
   return(dataBC)
 }
 
 check.column <- function(dataAll, dataCurrent, fileName, colName) {
-  # Check if column values in dataframe are correct
+  # Check for unrecognizeable value in column
   #
   # Args:
   #   dataAll: dataframe containing all correct values
@@ -46,10 +46,15 @@ check.column <- function(dataAll, dataCurrent, fileName, colName) {
 }
 
 year <- 2019
+fx_usd <- 280
+fx_eur <- 260
 
 fileIncomeCat <- "input/income_categories.csv"
 fileBalanceCat <- "input/balance_categories.csv"
 fileBluecoins <- "reports/transactions_list_table.csv"
+
+fileCatPivot <- "output/pivot_category.csv"
+fileAccPivot <- "output/pivot_account.csv"
 
 dataInc <- fread(fileIncomeCat)
 dataBal <- fread(fileBalanceCat, dec = ",")
@@ -58,4 +63,7 @@ dataBC <- read.bluecoins(fileBluecoins, year)
 check.column(dataInc, dataBC, fileBluecoins, "Category")
 check.column(dataBal, dataBC, fileBluecoins, "Account")
 
+pivotCat <- dcast(dataBC, Category ~ Month, value.var = "Amount", fun = sum)
+pivotAcc <- dcast(dataBC, Account ~ Month, value.var = "Amount", fun = sum)
 
+write.csv(pivotCat, fileCatPivot)
