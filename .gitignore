@@ -1,4 +1,5 @@
 reports/
+output/
 .Rproj.user/
 .RData
 .Rhistory

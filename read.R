@@ -4,22 +4,27 @@
 
 library(data.table)
 
-read.bluecoins <- function(fileName, year) {
+read.bluecoins <- function(fileName, year, fxRates) {
   # Read data from BlueCoins output file for given year
   #
   # Args:
   #   fileName: path to file
   #   year: year
+  #   fxRates: named list of fxRates
   #
   # Returns:
   #   Dataframe
   dataBC <- fread(fileName, encoding = "UTF-8")
   dataBC <- dataBC[, .(Date, Title, Amount, Currency, Category, Account)]
-  dataBC <- dataBC[substr(Date, 1, 4) == year ,]
-  dataBC <- dataBC[Category == "(Átvezetés)", Category := "Transfer" ]
-  dataBC <- dataBC[Account == "Unicredit", Account := "V.Uni" ]
+  dataBC <- dataBC[substr(Date, 1, 4) == year, ]
+  dataBC <- dataBC[Category == "(Átvezetés)", Category := "Transfer"]
+  dataBC <- dataBC[Account == "Unicredit", Account := "V.Uni"]
   dataBC <- dataBC[, Date := sapply(Date, function(x) (substr(x, 1, 10)))]
   dataBC <- dataBC[, Month := sapply(Date, function(x) (strtoi(substr(x, 6, 7))))]
+  dataBC <- dataBC[, AmountHUF := Amount]
+  dataBC <- dataBC[Currency == "USD", AmountHUF := Amount * fxRates["USD"]]
+  dataBC <- dataBC[Currency == "EUR", AmountHUF := Amount * fxRates["EUR"]]
+  dataBC <- dataBC[, AmountUSD := AmountHUF / fxRates["USD"]]
   return(dataBC)
 }
 
@@ -46,24 +51,30 @@ check.column <- function(dataAll, dataCurrent, fileName, colName) {
 }
 
 year <- 2019
-fx_usd <- 280
-fx_eur <- 260
+fxRates <- c("USD" = 280, "EUR" = 260)
 
 fileIncomeCat <- "input/income_categories.csv"
 fileBalanceCat <- "input/balance_categories.csv"
 fileBluecoins <- "reports/transactions_list_table.csv"
 
-fileCatPivot <- "output/pivot_category.csv"
-fileAccPivot <- "output/pivot_account.csv"
+fileCatPivotHUF <- "output/pivot_category_huf.csv"
+fileCatPivotUSD <- "output/pivot_category_usd.csv"
+fileAccPivotHUF <- "output/pivot_account_huf.csv"
+fileAccPivotUSD <- "output/pivot_account_usd.csv"
 
 dataInc <- fread(fileIncomeCat)
 dataBal <- fread(fileBalanceCat, dec = ",")
-dataBC <- read.bluecoins(fileBluecoins, year)
+dataBC <- read.bluecoins(fileBluecoins, year, fxRates)
 
 check.column(dataInc, dataBC, fileBluecoins, "Category")
 check.column(dataBal, dataBC, fileBluecoins, "Account")
 
-pivotCat <- dcast(dataBC, Category ~ Month, value.var = "Amount", fun = sum)
-pivotAcc <- dcast(dataBC, Account ~ Month, value.var = "Amount", fun = sum)
+pivCatHUF <- dcast(dataBC, Category ~ Month, value.var = "AmountHUF", fun = sum)
+pivCatUSD <- dcast(dataBC, Category ~ Month, value.var = "AmountUSD", fun = sum)
+pivAccHUF <- dcast(dataBC, Account ~ Month, value.var = "AmountHUF", fun = sum)
+pivAccUSD <- dcast(dataBC, Account ~ Month, value.var = "AmountUSD", fun = sum)
 
-write.csv(pivotCat, fileCatPivot)
+write.csv(pivCatHUF, fileCatPivotHUF)
+write.csv(pivCatUSD, fileCatPivotUSD)
+write.csv(pivAccHUF, fileAccPivotHUF)
+write.csv(pivAccUSD, fileAccPivotUSD)
