@@ -14,6 +14,7 @@ read.bluecoins <- function(fileName, year, fxRates) {
   #   d: Dataframe
   d <- fread(fileName, encoding = "UTF-8")
   d <- d[, .(Date, Title, Amount, Currency, Category, Account)]
+  setnames(d, "Title", "Details")
   d <- d[substr(Date, 1, 4) == year, ]
   d <- d[Category == "(Átvezetés)", Category := "Transfer"]
   d <- d[Account == "Unicredit", Account := "V.Uni"]
@@ -55,16 +56,15 @@ check.column <- function(dataAll, dataCurrent, fileName, colName) {
   # Check for unrecognizeable value in column
   #
   # Args:
-  #   dataAll: dataframe containing all correct values
-  #   dataCurrent: dataframe containing current values
+  #   dataAll: data.table containing all correct values
+  #   dataCurrent: data.table containing current values
   #   fileName: file name
   #   colName: column name to check
   #
   # Returns:
-  #   Dataframe
+  #   Nothing. Throws an error if unknown value found.
   catAll <- unique(dataAll[[colName]])
   catAct <- unique(dataCurrent[[colName]])
-  # browser()
   catWrong <- catAct[sapply(catAct, function(x) is.na(match(x, catAll)))]
   if (length(catWrong) > 0) {
     cat("Unknown ", colName, " found in file:", fileName, "\n")
@@ -73,12 +73,44 @@ check.column <- function(dataAll, dataCurrent, fileName, colName) {
   }
 }
 
+add.category <- function(data, patternData, bcData = NULL) {
+  # Add category for data based on patterns
+  #
+  # Args:
+  #   data: data.table containing Detail fields
+  #   patternData: data.table containing patterns
+  #   bcData: data.table with BlueCoins data (optional)
+  #
+  # Returns:
+  #   d: Dataframe
+  patterns <- patternData[,Pattern]
+  data[, Category := sapply(Details, function(x) {
+      matchResults <- sapply(patterns, grepl, x)
+      matchResults <- matchResults[matchResults == TRUE]
+      if (sum(matchResults) > 1) {
+        # browser()
+        print("Multiple pattern match!")
+        print(names(matchResults))
+        print(x)
+        stop()
+      } else if (sum(matchResults) == 0) {
+        "Uncategorized"
+        # print("No results found for the following:")
+        print(x)
+        # stop()
+      } else {
+        patternData[Pattern == names(matchResults), Category]
+      }
+    }
+    )]
+}
+
 year <- 2019
 fxRates <- c("USD" = 280, "EUR" = 260)
 
 fileIncomeCat <- "input/income_categories.csv"
 fileBalanceCat <- "input/balance_categories.csv"
-filePatterns <- "input/balance_categories.csv"
+filePatterns <- "input/patterns.csv"
 
 fileBluecoins <- "reports/transactions_list_table.csv"
 fileUnicredit <- "reports/export_07_02_2019.xls"
@@ -90,8 +122,11 @@ fileAccPivotUSD <- "output/pivot_account_usd.csv"
 
 dataInc <- fread(fileIncomeCat)
 dataBal <- fread(fileBalanceCat, dec = ",")
+patternData <- fread(filePatterns, encoding = "UTF-8")
+
 dataBC <- read.bluecoins(fileBluecoins, year, fxRates)
 dataUC <- read.unicredit(fileUnicredit, year, fxRates)
+dataUC <- add.category(dataUC, patternData, dataBC)
 
 check.column(dataInc, dataBC, fileBluecoins, "Category")
 check.column(dataBal, dataBC, fileBluecoins, "Account")
@@ -105,3 +140,4 @@ write.csv(pivCatHUF, fileCatPivotHUF)
 write.csv(pivCatUSD, fileCatPivotUSD)
 write.csv(pivAccHUF, fileAccPivotHUF)
 write.csv(pivAccUSD, fileAccPivotUSD)
+
