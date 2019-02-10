@@ -18,7 +18,7 @@ verbose <- TRUE
 
 fileIncomeCat <- "input/income_categories.csv"
 fileBalanceCat <- "input/balance_categories.csv"
-filePatternsUni <- "input/patterns_unicredit.csv"
+filePatterns <- "input/patterns.csv"
 fileRenameRules <- "input/rename_rules.csv"
 
 fileBluecoins <- "reports/transactions_list_table.csv"
@@ -34,7 +34,7 @@ fileAccPivotUSD <- "output/pivot_account_usd.csv"
 renameRules <- read.data(fileRenameRules)
 dataInc <- read.data(fileIncomeCat)
 dataBal <- read.data(fileBalanceCat)
-patternsUni <- read.data(filePatternsUni)
+patterns <- read.data(filePatterns)
 
 dataAll <- read.data(fileTransAll, dec = ".", verbose = verbose)
 dataBC <- read.bluecoins(fileBluecoins, year, fxRates, renameRules)
@@ -44,7 +44,7 @@ check.column(dataBal, dataBC, fileBluecoins, "Account")
 dataAll <- add.data(dataAll, dataBC[Account == "Cash"], verbose = verbose)
 
 dataUni <- read.unicredit(fileUnicredit, year, fxRates, renameRules)
-dataUni <- add.category(dataUni, patternsUni, dataBC)
+dataUni <- add.category(dataUni, patterns[Type == "Unicredit"], dataBC)
 
 # # Summarize data
 # pivCatHUF <- dcast(dataBC, Category ~ Month, value.var = "AmountHUF", fun = sum)

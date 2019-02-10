@@ -1,0 +1,40 @@
+Type;Category;Pattern
+Unicredit;Bank fee;Cr Forgalmi kedvezmény
+Unicredit;Bank fee;Költség ATM kifizetés
+Unicredit;Bank fee;Számlainformációs SMS díj
+Unicredit;Bank fee;Havi zárlati díj
+Unicredit;Bank fee;Állandó megbízás díja
+Unicredit;Bank fee;Átutalási Jut -SpectraNet
+Unicredit;Bank fee;eBanking havi szolgáltatási díj
+Unicredit;Bank fee;Bankon bel.átut.jut-SpNet
+Unicredit;Bank fee;Csoportos terhelés díja
+Unicredit;Bank fee;Bankon bel.áll.megbíz.díj
+Unicredit;CLT-New;C&A
+Unicredit;COM-Telephone;BUDAPEST FELTOLTES
+Unicredit;COM-Telephone;TELEKOM/MOBIL
+Unicredit;Donation sent;Adomány
+Unicredit;Donation sent;DONATION
+Unicredit;Donation sent;Kevezsda Szilvi
+Unicredit;Donation sent;OM Philippines
+Unicredit;EDU-Books;Kindle
+Unicredit;EDU-Zsebtanar;GSUITE_zse
+Unicredit;FOOD-Groceries;ALDI
+Unicredit;FOOD-Groceries;Ázsia Bolt
+Unicredit;FOOD-Groceries;CBA PRI'MA
+Unicredit;FOOD-Groceries;LIDL
+Unicredit;FOOD-Groceries;SPAR
+Unicredit;FOOD-Groceries;VEGYESKERESKEDE'S
+Unicredit;HLT-Pharmacy;FAGYO:NGY PATIKA
+Unicredit;OFF-Legal fees;KORMA'NYABLAK
+Unicredit;OFF-Legal fees;POSTA
+Unicredit;Payment-V;Morgan Stanley munkabér utalás
+Unicredit;REL-Eating out;E'TTEREM
+Unicredit;REL-Eating out;Nandori es Tarsa Kft.
+Unicredit;REL-Eating out;WOKZILLA
+Unicredit;REL-Gifts;VIRAGSZALON
+Unicredit;SHP-Other;ADMIN.WEBONIC.HU
+Unicredit;SHP-Toiletries;DM 020
+Unicredit;Transfer;^ATM kifizetés
+Unicredit;Transfer;SZABÓ VIKTOR
+Unicredit;TRS-National;VOLANBUSZ
+Unicredit;TRS-Public;BKK AUTOMATA
