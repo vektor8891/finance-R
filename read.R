@@ -2,45 +2,105 @@ library(data.table)
 library(readxl)
 library(qdap)
 
-read.bluecoins <- function(fileName, year, fxRates) {
+rename.data <- function(d, rulesAll, type, column = FALSE, verbose = FALSE) {
+  # Rename values in data.table
+  #
+  # Args:
+  #   d: original data.table
+  #   rulesAll: data.table containing all renaming rules
+  #      colnames(rules) = c('Type','Value','From','To')
+  #   type: filter for 'Type' column in rules data.table
+  #   column: if TRUE, columns are renamed
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   d: modified data.table
+  
+  # Rename columns
+  if (column) {
+    rules <- rulesAll[Type == type & Value == "Column"]
+    setnames(d, rules$From, rules$To)
+  # Rename values
+  } else {
+    rules <- rulesAll[Type == type & Value != "Column"]
+    for (i in 1:nrow(rules)) {
+      d <- d[get(rules[i, Value]) == rules[i, From],
+             c(rules[i, Value]) := rules[i, To]]
+    }
+  }
+  return(d)
+}
+
+read.data <- function(file, dec = ",", encoding = "UTF-8", verbose = FALSE) {
+  # Read data from file
+  #
+  # Args:
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   d: data.table
+  d <- fread(file, dec = dec, encoding = encoding)
+  if (verbose) cat(dim(d)[[1]], " rows exported from: ", file)
+  return(d)
+}
+
+add.data <- function(dataAll, dataNew, verbose = FALSE) {
+  # Add new data to data.table
+  #
+  # Args:
+  #   dataAll: data.table with all data
+  #   dataNew: data.table with new data
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   d: data.table
+  # browser()
+  d <- merge(dataAll, dataNew, all.y = TRUE)
+  newRows <- dim(d)[[1]] - dim(dataAll)[[1]]
+  if (verbose) cat(newRows, " new rows added to data table")
+  return(d)
+}
+
+read.bluecoins <- function(fileName, year, fxRates, renameRules) {
   # Read data from BlueCoins output file for given year
   #
   # Args:
   #   fileName: path to file
   #   year: year
   #   fxRates: named list of fxRates
+  #   renameRules: data.table containing all renaming rules
   #
   # Returns:
-  #   d: Dataframe
+  #   d: data.table
   d <- fread(fileName, encoding = "UTF-8")
   d <- d[, .(Date, Title, Amount, Currency, Category, Account)]
-  setnames(d, "Title", "Details")
+  d <- rename.data(d, renameRules, "BlueCoins", column = TRUE)
+  d <- rename.data(d, renameRules, "BlueCoins")
   d <- d[substr(Date, 1, 4) == year, ]
-  d <- d[Category == "(Átvezetés)", Category := "Transfer"]
-  d <- d[Account == "Unicredit", Account := "V.Uni"]
-  d <- d[, Date := sapply(Date, function(x) sub("-", ".", substr(x, 1, 10)))]
+  d <- d[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
   d <- d[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
   d <- d[, AmountHUF := Amount]
   d <- d[Currency == "USD", AmountHUF := Amount * fxRates["USD"]]
   d <- d[Currency == "EUR", AmountHUF := Amount * fxRates["EUR"]]
-  d <- d[, AmountUSD := AmountHUF / fxRates["USD"]]
+  d <- d[, AmountUSD := round(AmountHUF / fxRates["USD"], 2)]
+  setcolorder(d, c(colnames(d)[-2], colnames(d)[2]))
   return(d)
 }
 
-read.unicredit <- function(fileName, year, fxRates) {
+read.unicredit <- function(fileName, year, fxRates, renameRules) {
   # Read data from Unicredit output file for given year
   #
   # Args:
   #   fileName: path to file
   #   year: year
   #   fxRates: named list of fxRates
+  #   renameRules: data.table containing all renaming rules
   #
   # Returns:
-  #   d: Dataframe
+  #   d: data.table
   d <- as.data.table(read_excel(fileName, skip = 3))
-  old <- c("Tranzakció részletek", "Érték Dátum", "Összeg")
-  new <- c("Details", "Date", "Amount")
-  setnames(d, old, new)
+  d <- rename.data(d, renameRules, "Unicredit", column = TRUE)
   d <- d[, .(Details, Date, Amount)]
   d <- d[substr(Date, 1, 4) == year, ]
   d <- d[, Account := "V.Uni"]
@@ -82,7 +142,7 @@ add.category <- function(data, patternData, bcData = NULL) {
   #   bcData: data.table with BlueCoins data (optional)
   #
   # Returns:
-  #   d: Dataframe
+  #   d: data.table
   patterns <- patternData[,Pattern]
   data[, Category := sapply(Details, function(x) {
       matchResults <- sapply(patterns, grepl, x)
@@ -93,51 +153,9 @@ add.category <- function(data, patternData, bcData = NULL) {
         print(names(matchResults))
         print(x)
         stop()
-      } else if (sum(matchResults) == 0) {
-        "Uncategorized"
-        # print("No results found for the following:")
-        print(x)
-        # stop()
-      } else {
+      } else if (sum(matchResults) == 1) {
         patternData[Pattern == names(matchResults), Category]
       }
     }
     )]
 }
-
-year <- 2019
-fxRates <- c("USD" = 280, "EUR" = 260)
-
-fileIncomeCat <- "input/income_categories.csv"
-fileBalanceCat <- "input/balance_categories.csv"
-filePatterns <- "input/patterns.csv"
-
-fileBluecoins <- "reports/transactions_list_table.csv"
-fileUnicredit <- "reports/export_07_02_2019.xls"
-
-fileCatPivotHUF <- "output/pivot_category_huf.csv"
-fileCatPivotUSD <- "output/pivot_category_usd.csv"
-fileAccPivotHUF <- "output/pivot_account_huf.csv"
-fileAccPivotUSD <- "output/pivot_account_usd.csv"
-
-dataInc <- fread(fileIncomeCat)
-dataBal <- fread(fileBalanceCat, dec = ",")
-patternData <- fread(filePatterns, encoding = "UTF-8")
-
-dataBC <- read.bluecoins(fileBluecoins, year, fxRates)
-dataUC <- read.unicredit(fileUnicredit, year, fxRates)
-dataUC <- add.category(dataUC, patternData, dataBC)
-
-check.column(dataInc, dataBC, fileBluecoins, "Category")
-check.column(dataBal, dataBC, fileBluecoins, "Account")
-
-pivCatHUF <- dcast(dataBC, Category ~ Month, value.var = "AmountHUF", fun = sum)
-pivCatUSD <- dcast(dataBC, Category ~ Month, value.var = "AmountUSD", fun = sum)
-pivAccHUF <- dcast(dataBC, Account ~ Month, value.var = "AmountHUF", fun = sum)
-pivAccUSD <- dcast(dataBC, Account ~ Month, value.var = "AmountUSD", fun = sum)
-
-write.csv(pivCatHUF, fileCatPivotHUF)
-write.csv(pivCatUSD, fileCatPivotUSD)
-write.csv(pivAccHUF, fileAccPivotHUF)
-write.csv(pivAccUSD, fileAccPivotUSD)
-
