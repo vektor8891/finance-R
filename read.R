@@ -17,15 +17,14 @@ rename.data <- function(d, rulesAll, type, column = FALSE, verbose = FALSE) {
   #   d: modified data.table
   
   # Rename columns
-  if (column) {
-    rules <- rulesAll[Type == type & Value == "Column"]
-    setnames(d, rules$From, rules$To)
+  rulesCol <- rulesAll[Type == type & Value == "Column"]
+  setnames(d, rulesCol$From, rulesCol$To)
   # Rename values
-  } else {
-    rules <- rulesAll[Type == type & Value != "Column"]
-    for (i in 1:nrow(rules)) {
-      d <- d[get(rules[i, Value]) == rules[i, From],
-             c(rules[i, Value]) := rules[i, To]]
+  rulesVal <- rulesAll[Type == type & Value != "Column"]
+  if (nrow(rulesVal) > 0) {
+    for (i in 1:nrow(rulesVal)) {
+      d <- d[get(rulesVal[i, Value]) == rulesVal[i, From],
+              c(rulesVal[i, Value]) := rulesVal[i, To]]
     }
   }
   return(d)
@@ -75,7 +74,6 @@ read.bluecoins <- function(fileName, year, fxRates, renameRules) {
   #   d: data.table
   d <- fread(fileName, encoding = "UTF-8")
   d <- d[, .(Date, Title, Amount, Currency, Category, Account)]
-  d <- rename.data(d, renameRules, "BlueCoins", column = TRUE)
   d <- rename.data(d, renameRules, "BlueCoins")
   d <- d[substr(Date, 1, 4) == year, ]
   d <- d[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
@@ -100,7 +98,7 @@ read.unicredit <- function(fileName, year, fxRates, renameRules) {
   # Returns:
   #   d: data.table
   d <- as.data.table(read_excel(fileName, skip = 3))
-  d <- rename.data(d, renameRules, "Unicredit", column = TRUE)
+  d <- rename.data(d, renameRules, "Unicredit")
   d <- d[, .(Details, Date, Amount)]
   d <- d[substr(Date, 1, 4) == year, ]
   d <- d[, Account := "V.Uni"]

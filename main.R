@@ -6,10 +6,7 @@
 # Year: 2019
 # Licence: MIT
 
-# use eval instead of source - see "Known issues" in suppport page:
-# https://support.rstudio.com/hc/en-us/articles/200532197-Character-Encoding
 source("read.R")
-# eval(parse("read.R", encoding = "UTF-8"))
 
 # Inputs
 year <- 2019
