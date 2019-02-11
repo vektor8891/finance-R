@@ -41,7 +41,7 @@ check.column(dataBal, dataBC, fileBluecoins, "Account")
 dataAll <- add.data(dataAll, dataBC[Account == "Cash"], verbose = verbose)
 
 dataUni <- read.unicredit(fileUnicredit, year, fxRates, renameRules)
-dataUni <- add.category(dataUni, patterns[Type == "Unicredit"], dataBC)
+dataUni <- add.category(dataUni, patterns[Type == "Unicredit"], dataBC, T)
 
 # # Summarize data
 # pivCatHUF <- dcast(dataBC, Category ~ Month, value.var = "AmountHUF", fun = sum)

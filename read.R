@@ -131,29 +131,59 @@ check.column <- function(dataAll, dataCurrent, fileName, colName) {
   }
 }
 
-add.category <- function(data, patternData, bcData = NULL) {
+add.category <- function(data, patternData, bcData = NULL, verbose = F) {
   # Add category for data based on patterns
   #
   # Args:
   #   data: data.table containing Detail fields
   #   patternData: data.table containing patterns
   #   bcData: data.table with BlueCoins data (optional)
+  #   verbose: print additional information
   #
   # Returns:
   #   d: data.table
   patterns <- patternData[,Pattern]
-  data[, Category := sapply(Details, function(x) {
-      matchResults <- sapply(patterns, grepl, x)
+  data[, Category := mapply(function(detail, huf, date, account) {
+    catBC <- check.category(bcData, huf, date, account, verbose = verbose)
+    if (is.null(catBC)) {
+      matchResults <- sapply(patterns, grepl, detail)
       matchResults <- matchResults[matchResults == TRUE]
       if (sum(matchResults) > 1) {
-        # browser()
-        print("Multiple pattern match!")
-        print(names(matchResults))
-        print(x)
+        cat(c("Multiple match for", names(matchResults), "in\n", detail))
         stop()
       } else if (sum(matchResults) == 1) {
         patternData[Pattern == names(matchResults), Category]
       }
+    } else {
+      catBC
     }
-    )]
+    }, Details, AmountHUF, Date, Account)]
+}
+
+check.category <- function(bcData, huf, date, account, days = 7, verbose = F) {
+  # Check category for transation in BlueCoins data
+  #
+  # Args:
+  #   bcData: data.table with BlueCoins data (optional)
+  #   huf: amount in HUF
+  #   date: transaction date
+  #   account: account name
+  #   days: max number or days to search before date
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   catBC: category
+  catBC <- NULL
+  matchRows <- bcData[Account == account & AmountHUF == huf]
+  if (nrow(matchRows) > 0) {
+    for (i in 1:nrow(matchRows)) {
+      dateRow <- matchRows[i, Date]
+      diff <- as.Date(dateRow, "%Y.%m.%d") - as.Date(date, "%Y.%m.%d")
+      if (as.numeric(diff) <= days) {
+        catBC <- matchRows[i, Category]
+        if (verbose) cat(c("Category for", huf, "HUF on", date, catBC, "\n"))
+      }
+    }
+  }
+  return(catBC)
 }
