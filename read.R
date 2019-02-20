@@ -52,7 +52,7 @@ read.data <- function(file, dec = ".", encoding = "UTF-8", skip = 0,
     cat("Unknown filetype:", fileType, "in", file, "\n")
     stop()
   }
-  if (verbose) cat(dim(d)[[1]], "rows imported from:", file, "\n")
+  if (verbose) cat(dim(d)[[1]], "rows imported from:", file)
   return(d)
 }
 
@@ -74,7 +74,7 @@ export.data <- function(dt, file, encoding = "UTF-8", verbose = F) {
     cat("Unknown filetype:", fileType, "in", file, "\n")
     stop()
   }
-  if (verbose) cat(dim(dt)[[1]], "rows exported to:", file, "\n")
+  if (verbose) cat(dim(dt)[[1]], "rows exported to:", file)
 }
 
 add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
@@ -88,13 +88,9 @@ add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
   # Returns:
   #   dt: data.table
   # browser()
-  if (nrow(dtAll) == 0) {
-    dt <- dtNew
-  } else {
-    dt <- merge(dtAll, dtNew, all = T)
-  }
+  dt <- merge(dtAll, dtNew, all = T)
   newRows <- dim(dt)[[1]] - dim(dtAll)[[1]]
-  if (verbose) cat(newRows, "new rows added to", name, "\n")
+  if (verbose) cat(paste0("\n", newRows, " new rows added to ", name))
   return(dt)
 }
 
@@ -170,18 +166,19 @@ check.column <- function(dataAll, dataCurrent, colName) {
   }
 }
 
-add.category <- function(dt, patternData, bcData, verbose = F) {
+add.category <- function(dt, bcData, patternData, manData, verbose = F) {
   # Add category for transactions
   #
   # Add category for transactions based on the following hierarchy:
-  #   1) manual transactions
-  #   2) historical data
-  #   3) patterns
+  #   1) historical data
+  #   2) patterns
+  #   3) manual transactions
   #
   # Args:
   #   dt: data.table to check (must contain Detail column)
+  #   bcData: data.table with BlueCoins transactions
   #   patternData: data.table containing patterns 
-  #   bcData: data.table with BlueCoins data
+  #   manData: data.table with manual transactions
   #   verbose: print additional information
   #
   # Returns:
@@ -194,6 +191,8 @@ add.category <- function(dt, patternData, bcData, verbose = F) {
     if (!is.na(catBC)) return(catBC)
     catPtn <- get.category.pattern(detail, patternData, verbose = verbose)
     if (!is.na(catPtn)) return(catPtn)
+    catMan <- get.category.manual(manData, huf, date, account, verbose = T)
+    if (!is.na(catMan)) return(catMan)
     return(NA)
     }, Details, AmountHUF, Date, Account)]
   dt <- dt[,.(Category = unlist(Category)), by = setdiff(names(dt), 'Category')]
@@ -252,7 +251,33 @@ get.category.pattern <- function(detail, patternData, verbose = F) {
   return(catPtn)
 }
 
-get.data.all <- function(dt, fileAll, fileManual, empty = F, verbose = F) {
+get.category.manual <- function(manData, huf, date, account, verbose = F) {
+  # Get category for transation from manual transactions
+  #
+  # Args:
+  #   manData: data.table with manual transactions
+  #   huf: amount in HUF
+  #   date: transaction date
+  #   account: account name
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   catPtn: category
+  dtFilt <- manData[!is.na(Category) & AmountHUF == huf & Date == date & Account == account]
+  if (nrow(dtFilt) == 1) {
+    catMan <- dtFilt[1, Category]
+    if (verbose) cat(paste0("\n\t'", catMan, "' based on manual edit\n"))
+  } else if (nrow(dtFilt) > 1) {
+    cat("Multiple values found:\n")
+    print(dtFilt)
+    stop()
+  } else {
+    catMan <- NA
+  }
+  return(catMan)
+}
+
+get.data.all <- function(dt, file, empty = F, verbose = F) {
   # Get all transactions or empty data.table
   #
   # Args:
@@ -263,15 +288,37 @@ get.data.all <- function(dt, fileAll, fileManual, empty = F, verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  dt$all <- read.data(fileAll, verbose = (!empty & verbose))
+  dt$all <- read.data(file, verbose = (!empty & verbose))
   if (empty) {
-    if (verbose) print("read empty data.table for all transactions")
+    if (verbose) cat("read empty data.table for dt$all")
     dt$all <- dt$all[0,]
   }
-  dt$manual <- read.data(fileManual, verbose = (!empty & verbose))
+  return(dt)
+}
+
+get.data.manual <- function(dt, file, empty = F, verbose = F) {
+  # Get manual transactions or empty data.table
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   file: path to file
+  #   empty: if T returns empty data.table
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
   if (empty) {
-    if (verbose) print("read empty data.table for manual transactions")
+    if (verbose) cat("read empty data.table for dt$manual")
     dt$manual <- dt$all[0,]
+  } else {
+    dt$manual <- read.data(file, verbose = (!empty & verbose))
+    check.column(dt$income, dt$manual[!is.na(Category)], "Category")
+    check.column(dt$balance, dt$manual, "Account")
+    dtDup <- dt$manual[duplicated(dt$manual), ]
+    if (nrow(dtDup) > 0) {
+      dt$manual <- dt$manual[!duplicated(dt$manual), ]
+      if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
+    }
   }
   return(dt)
 }
@@ -294,7 +341,8 @@ get.data.bc <- function(dt, file, verbose = F) {
   dt$bc <- read.bluecoins(file, dt$year, dt$fx, dt$rules, verbose = T)
   check.column(dt$income, dt$bc, "Category")
   check.column(dt$balance, dt$bc, "Account")
-  dt$all <- add.data(dt$all, dt$bc[Account == "Cash"], verbose = T)
+  dtCash <- dt$bc[Account == "Cash"]
+  dt$all <- add.data(dt$all, dtCash, name = "dt$all", verbose = T)
   return(dt)
 }
 
@@ -313,10 +361,9 @@ get.data.uni <- function(dt, file, verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  dt$uni <- read.unicredit(file, dt$year, dt$fxRates, dt$rules,
-                           verbose = verbose)
+  dt$uni <- read.unicredit(file, dt$year, dt$fx, dt$rules, verbose = verbose)
   patterns <- dt$patterns[Type == "Unicredit"]
-  dt$uni <- add.category(dt$uni, patterns, dt$bc, verbose = F)
+  dt$uni <- add.category(dt$uni, dt$bc, patterns, dt$manual, verbose = F)
   dtNA <- dt$uni[is.na(Category), ]
   dtNotNA <- dt$uni[!is.na(Category), ]
   dt$manual <- add.data(dt$manual, dtNA, name = "dt$manual", verbose = verbose)

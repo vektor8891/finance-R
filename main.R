@@ -6,8 +6,7 @@
 # Year: 2019
 # Licence: MIT
 
-# TODO: fix AmountUSD
-# TODO: search for manually added categories
+# TODO: exclude categories where patterns found
 
 source("read.R")
 
@@ -30,12 +29,13 @@ dt$income <- read.data(fileIncomeCat)
 dt$balance <- read.data(fileBalanceCat, dec = ",")
 dt$patterns <- read.data(filePatterns)
 
-dt <- get.data.all(dt, fileTransAll, fileTransManual, empty = T, verbose = T)
+dt <- get.data.all(dt, fileTransAll, empty = T, verbose = T)
+dt <- get.data.manual(dt, fileTransManual, empty = T, verbose = T)
 dt <- get.data.bc(dt, fileBluecoins, verbose = T)
 dt <- get.data.uni(dt, fileUnicredit, verbose = T)
 export.data(dt$all, fileTransAll, verbose = T)
 export.data(dt$manual, fileTransManual, verbose = T)
-browser()
+# browser()
 
 # # # Summarize data
 # dt$fileCatPivotHUF <- "output/pivot_category_huf.csv"
