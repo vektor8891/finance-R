@@ -2,7 +2,7 @@ library(data.table)
 library(readxl)
 library(qdap)
 
-rename.data <- function(d, rulesAll, type, column = FALSE, verbose = FALSE) {
+rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
   # Rename values in data.table
   #
   # Args:
@@ -10,7 +10,7 @@ rename.data <- function(d, rulesAll, type, column = FALSE, verbose = FALSE) {
   #   rulesAll: data.table containing all renaming rules
   #      colnames(rules) = c('Type','Value','From','To')
   #   type: filter for 'Type' column in rules data.table
-  #   column: if TRUE, columns are renamed
+  #   column: if T, columns are renamed
   #   verbose: print additional information
   #
   # Returns:
@@ -30,21 +30,54 @@ rename.data <- function(d, rulesAll, type, column = FALSE, verbose = FALSE) {
   return(d)
 }
 
-read.data <- function(file, dec = ",", encoding = "UTF-8", verbose = FALSE) {
+read.data <- function(file, dec = ".", encoding = "UTF-8", skip = 0,
+  verbose = F) {
   # Read data from file
   #
   # Args:
   #   file: path to file
+  #   dec: decimal places
+  #   encoding: file encoding
+  #   skip: number of lines to skip
   #   verbose: print additional information
   #
   # Returns:
   #   d: data.table
-  d <- fread(file, dec = dec, encoding = encoding)
-  if (verbose) cat(dim(d)[[1]], " rows exported from: ", file)
+  fileType <- unlist(strsplit(file, "[.]"))[2]
+  if (fileType == "csv") {
+    d <- fread(file, dec = dec, encoding = encoding)
+  } else if (fileType %in% c("xlsx", "xls")) {
+    d <- as.data.table(read_excel(file, skip = skip))
+  } else {
+    cat("Unknown filetype:", fileType, "in", file, "\n")
+    stop()
+  }
+  if (verbose) cat(dim(d)[[1]], "rows imported from:", file, "\n")
   return(d)
 }
 
-add.data <- function(dtAll, dtNew, verbose = FALSE) {
+export.data <- function(dt, file, encoding = "UTF-8", verbose = F) {
+  # Export data to file
+  #
+  # Args:
+  #   dt: data.table
+  #   file: path to file
+  #   encoding: file encoding
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   d: data.table
+  fileType <- unlist(strsplit(file, "[.]"))[2]
+  if (fileType == "csv") {
+    write.csv(dt, file, fileEncoding = encoding, row.names = FALSE)
+  } else {
+    cat("Unknown filetype:", fileType, "in", file, "\n")
+    stop()
+  }
+  if (verbose) cat(dim(dt)[[1]], "rows exported to:", file, "\n")
+}
+
+add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
   # Add new data to data.table
   #
   # Args:
@@ -55,17 +88,21 @@ add.data <- function(dtAll, dtNew, verbose = FALSE) {
   # Returns:
   #   dt: data.table
   # browser()
-  dt <- merge(dtAll, dtNew, all = TRUE)
+  if (nrow(dtAll) == 0) {
+    dt <- dtNew
+  } else {
+    dt <- merge(dtAll, dtNew, all = T)
+  }
   newRows <- dim(dt)[[1]] - dim(dtAll)[[1]]
-  if (verbose) cat(newRows, " new rows added to data table")
+  if (verbose) cat(newRows, "new rows added to", name, "\n")
   return(dt)
 }
 
-read.bluecoins <- function(fileName, year, fxRates, rules, verbose = FALSE) {
+read.bluecoins <- function(file, year, fxRates, rules, verbose = F) {
   # Read data from BlueCoins output file for given year
   #
   # Args:
-  #   fileName: path to file
+  #   file: path to file
   #   year: year
   #   fxRates: named list of fxRates
   #   rules: data.table containing all renaming rules
@@ -73,8 +110,7 @@ read.bluecoins <- function(fileName, year, fxRates, rules, verbose = FALSE) {
   #
   # Returns:
   #   dt: data.table
-  dt <- fread(fileName, encoding = "UTF-8")
-  if (verbose) cat(paste0(dim(dt)[[1]], " rows imported from ", fileName))
+  dt <- read.data(file, verbose = verbose)
   dt <- dt[, .(Date, Title, Amount, Currency, Category, Account)]
   dt <- rename.data(dt, rules, "BlueCoins")
   dt <- dt[substr(Date, 1, 4) == year, ]
@@ -100,8 +136,7 @@ read.unicredit <- function(fileName, year, fxRates, renameRules, verbose = F) {
   #
   # Returns:
   #   dt: data.table
-  dt <- as.data.table(read_excel(fileName, skip = 3))
-  if (verbose) cat(paste0(dim(dt)[[1]], " rows imported from ", fileName))
+  dt <- read.data(fileName, skip = 3, verbose = verbose)
   dt <- rename.data(dt, renameRules, "Unicredit")
   dt <- dt[, .(Details, Date, Amount)]
   dt <- dt[substr(Date, 1, 4) == year, ]
@@ -115,13 +150,12 @@ read.unicredit <- function(fileName, year, fxRates, renameRules, verbose = F) {
   return(dt)
 }
 
-check.column <- function(dataAll, dataCurrent, fileName, colName) {
+check.column <- function(dataAll, dataCurrent, colName) {
   # Check for unrecognizeable value in column
   #
   # Args:
   #   dataAll: data.table containing all correct values
   #   dataCurrent: data.table containing current values
-  #   fileName: file name
   #   colName: column name to check
   #
   # Returns:
@@ -130,43 +164,38 @@ check.column <- function(dataAll, dataCurrent, fileName, colName) {
   catAct <- unique(dataCurrent[[colName]])
   catWrong <- catAct[sapply(catAct, function(x) is.na(match(x, catAll)))]
   if (length(catWrong) > 0) {
-    cat("Unknown ", colName, " found in file:", fileName, "\n")
+    cat(paste0("Unknown ", colName, " found\n"))
     print(catWrong)
     stop()
   }
 }
 
-add.category <- function(dt, patternData, bcData = NULL, verbose = F) {
+add.category <- function(dt, patternData, bcData, verbose = F) {
   # Add category for transactions
   #
-  # Add category for transactions based on 1) patterns and 2) historical data.
-  # Throw error if categories from 1) and 2) don't match.
+  # Add category for transactions based on the following hierarchy:
+  #   1) manual transactions
+  #   2) historical data
+  #   3) patterns
   #
   # Args:
-  #   dt: data.table containing Detail fields
-  #   patternData: data.table containing patterns
-  #   bcData: data.table with BlueCoins data (optional)
+  #   dt: data.table to check (must contain Detail column)
+  #   patternData: data.table containing patterns 
+  #   bcData: data.table with BlueCoins data
   #   verbose: print additional information
   #
   # Returns:
   #   dt: data.table
-  patterns <- patternData[,Pattern]
+  patterns <- patternData[, Pattern]
   dt <- dt[, Category := NA]
   dt[, Category := mapply(function(detail, huf, date, account) {
     if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
     catBC <- get.category.data(bcData, huf, date, account, verbose = verbose)
+    if (!is.na(catBC)) return(catBC)
     catPtn <- get.category.pattern(detail, patternData, verbose = verbose)
-    # browser()
-    if (is.na(catBC)) {
-      return(catPtn)
-    } else if (is.na(catPtn)) {
-      return(catBC)
-    } else if (catBC != catPtn) {
-      if (verbose) cat(paste0("\tWARNING: '", catBC, "' overwrites '", catPtn, "'!!!\n"))
-      return(catBC)
-    } else {
-      return(catBC)
-    }}, Details, AmountHUF, Date, Account)]
+    if (!is.na(catPtn)) return(catPtn)
+    return(NA)
+    }, Details, AmountHUF, Date, Account)]
   dt <- dt[,.(Category = unlist(Category)), by = setdiff(names(dt), 'Category')]
   return(dt)
 }
@@ -212,7 +241,7 @@ get.category.pattern <- function(detail, patternData, verbose = F) {
   catPtn <- NA
   patterns <- patternData[,Pattern]
   matchResults <- sapply(patterns, grepl, detail)
-  matchResults <- matchResults[matchResults == TRUE]
+  matchResults <- matchResults[matchResults == T]
   if (sum(matchResults) > 1) {
     cat(c("Multiple match for", names(matchResults), "in\n", detail))
     stop()
@@ -221,4 +250,76 @@ get.category.pattern <- function(detail, patternData, verbose = F) {
     if (verbose) cat(paste0("\t'", catPtn, "' based on '", names(matchResults), "'\n"))
   }
   return(catPtn)
+}
+
+get.data.all <- function(dt, fileAll, fileManual, empty = F, verbose = F) {
+  # Get all transactions or empty data.table
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   file: path to file
+  #   empty: if T returns empty data.table
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  dt$all <- read.data(fileAll, verbose = (!empty & verbose))
+  if (empty) {
+    if (verbose) print("read empty data.table for all transactions")
+    dt$all <- dt$all[0,]
+  }
+  dt$manual <- read.data(fileManual, verbose = (!empty & verbose))
+  if (empty) {
+    if (verbose) print("read empty data.table for manual transactions")
+    dt$manual <- dt$all[0,]
+  }
+  return(dt)
+}
+
+get.data.bc <- function(dt, file, verbose = F) {
+  # Get BlueCoins transactions
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $rules: renaming rules
+  #     $income: income categories
+  #     $balance: balance categories
+  #     $year: year to check
+  #     $fx: FX rates
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  dt$bc <- read.bluecoins(file, dt$year, dt$fx, dt$rules, verbose = T)
+  check.column(dt$income, dt$bc, "Category")
+  check.column(dt$balance, dt$bc, "Account")
+  dt$all <- add.data(dt$all, dt$bc[Account == "Cash"], verbose = T)
+  return(dt)
+}
+
+get.data.uni <- function(dt, file, verbose = F) {
+  # Get Unicredit transactions
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $rules: renaming rules
+  #     $income: income categories
+  #     $balance: balance categories
+  #     $year: year to check
+  #     $fx: FX rates
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  dt$uni <- read.unicredit(file, dt$year, dt$fxRates, dt$rules,
+                           verbose = verbose)
+  patterns <- dt$patterns[Type == "Unicredit"]
+  dt$uni <- add.category(dt$uni, patterns, dt$bc, verbose = F)
+  dtNA <- dt$uni[is.na(Category), ]
+  dtNotNA <- dt$uni[!is.na(Category), ]
+  dt$manual <- add.data(dt$manual, dtNA, name = "dt$manual", verbose = verbose)
+  dt$all <- add.data(dt$all, dtNotNA, name = "dt$all", verbose = verbose)
+  return(dt)
 }

@@ -6,13 +6,12 @@
 # Year: 2019
 # Licence: MIT
 
+# TODO: fix AmountUSD
+# TODO: search for manually added categories
+
 source("read.R")
-# sink("finance.log", append = FALSE, split = TRUE)
 
 # Inputs
-year <- 2019
-fxRates <- c("USD" = 280, "EUR" = 260)
-
 fileIncomeCat <- "input/income_categories.csv"
 fileBalanceCat <- "input/balance_categories.csv"
 filePatterns <- "input/patterns.csv"
@@ -20,37 +19,29 @@ fileRenameRules <- "input/rename_rules.csv"
 
 fileBluecoins <- "reports/transactions_list_table.csv"
 fileUnicredit <- "reports/export_07_02_2019.xls"
-
 fileTransAll <- "output/transactions_all.csv"
-fileCatPivotHUF <- "output/pivot_category_huf.csv"
-fileCatPivotUSD <- "output/pivot_category_usd.csv"
-fileAccPivotHUF <- "output/pivot_account_huf.csv"
-fileAccPivotUSD <- "output/pivot_account_usd.csv"
+fileTransManual <- "output/transactions_manual.csv"
 
 # Read data
-renameRules <- read.data(fileRenameRules)
-dtInc <- read.data(fileIncomeCat)
-dtBal <- read.data(fileBalanceCat)
-patterns <- read.data(filePatterns)
+dt <- list("year" = 2019)
+dt$fx <- c("USD" = 280, "EUR" = 260)
+dt$rules <- read.data(fileRenameRules)
+dt$income <- read.data(fileIncomeCat)
+dt$balance <- read.data(fileBalanceCat, dec = ",")
+dt$patterns <- read.data(filePatterns)
 
-dtAll <- read.data(fileTransAll, dec = ".", verbose = T)
-cat(paste0(dim(dtAll)[[1]], " rows imported from ", fileTransAll))
-dtBC <- read.bluecoins(fileBluecoins, year, fxRates, renameRules, verbose = T)
-check.column(dtInc, dtBC, fileBluecoins, "Category")
-check.column(dtBal, dtBC, fileBluecoins, "Account")
-write.csv(dtBC[Account == "Cash"], fileTransAll, fileEncoding = "UTF-8", row.names = FALSE)
-dtAll <- add.data(dtAll, dtBC[Account == "Cash"], verbose = T)
+dt <- get.data.all(dt, fileTransAll, fileTransManual, empty = T, verbose = T)
+dt <- get.data.bc(dt, fileBluecoins, verbose = T)
+dt <- get.data.uni(dt, fileUnicredit, verbose = T)
+export.data(dt$all, fileTransAll, verbose = T)
+export.data(dt$manual, fileTransManual, verbose = T)
+browser()
 
-dtUni <- read.unicredit(fileUnicredit, year, fxRates, renameRules, verbose = T)
-dtUni <- add.category(dtUni, patterns[Type == "Unicredit"], dtBC, verbose = F)
-
-# browser()
-dtAll <- add.data(dtAll, dtUni, verbose = T)
-
-write.csv(dtAll, fileTransAll, fileEncoding = "UTF-8", row.names = FALSE)
-cat(paste0(dim(dtAll)[[1]], " rows exported to ", fileTransAll))
-
-# # Summarize data
+# # # Summarize data
+# dt$fileCatPivotHUF <- "output/pivot_category_huf.csv"
+# dt$fileCatPivotUSD <- "output/pivot_category_usd.csv"
+# dt$fileAccPivotHUF <- "output/pivot_account_huf.csv"
+# dt$fileAccPivotUSD <- "output/pivot_account_usd.csv"
 # pivCatHUF <- dcast(dataBC, Category ~ Month, value.var = "AmountHUF", fun = sum)
 # pivCatUSD <- dcast(dataBC, Category ~ Month, value.var = "AmountUSD", fun = sum)
 # pivAccHUF <- dcast(dataBC, Account ~ Month, value.var = "AmountHUF", fun = sum)
