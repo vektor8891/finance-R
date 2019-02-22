@@ -88,6 +88,8 @@ add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
   # Returns:
   #   dt: data.table
   # browser()
+  # View(dtAll)
+  # View(dtNew)
   dt <- merge(dtAll, dtNew, all = T)
   newRows <- dim(dt)[[1]] - dim(dtAll)[[1]]
   if (verbose) cat(paste0("\n", newRows, " new rows added to ", name))
@@ -110,13 +112,13 @@ read.bluecoins <- function(file, year, fxRates, rules, verbose = F) {
   dt <- dt[, .(Date, Title, Amount, Currency, Category, Account)]
   dt <- rename.data(dt, rules, "BlueCoins")
   dt <- dt[substr(Date, 1, 4) == year, ]
-  dt <- dt[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
-  dt <- dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
-  dt <- dt[, AmountHUF := Amount]
-  dt <- dt[Currency == "USD", AmountHUF := Amount * fxRates["USD"]]
-  dt <- dt[Currency == "EUR", AmountHUF := Amount * fxRates["EUR"]]
-  dt <- dt[, AmountUSD := round(AmountHUF / fxRates["USD"], 2)]
-  setcolorder(dt, c(colnames(dt)[-2], colnames(dt)[2]))
+  dt[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
+  dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
+  dt[, AmountHUF := Amount]
+  dt[Currency == "USD", AmountHUF := Amount * fxRates["USD"]]
+  dt[Currency == "EUR", AmountHUF := Amount * fxRates["EUR"]]
+  dt[, AmountUSD := round(AmountHUF / fxRates["USD"], 2)]
+  dt[, Source := "BlueCoins"]
   return(dt)
 }
 
@@ -134,15 +136,18 @@ read.unicredit <- function(fileName, year, fxRates, renameRules, verbose = F) {
   #   dt: data.table
   dt <- read.data(fileName, skip = 3, verbose = verbose)
   dt <- rename.data(dt, renameRules, "Unicredit")
+  # browser()
+  dt[, Details := paste0(Partner, " | ",  PartnerAccount, " | ", Transaction)]
   dt <- dt[, .(Details, Date, Amount)]
+  dt[, c("Category", "Source") := character()]
   dt <- dt[substr(Date, 1, 4) == year, ]
   dt <- dt[, Account := "V.Uni"]
-  dt <- dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
-  dt <- dt[, AmountHUF := sapply(Amount, function(x) 
+  dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
+  dt[, AmountHUF := sapply(Amount, function(x) 
     as.numeric(mgsub(c(",", "\u00A0", " HUF"), c(".", "", ""), x))
   )]
-  dt <- dt[, AmountUSD := round(AmountHUF / fxRates["USD"], 2)]
-  dt <- dt[, c("Amount", "Currency") := list(AmountHUF, "HUF")]
+  dt[, AmountUSD := round(AmountHUF / fxRates["USD"], 2)]
+  dt[, c("Amount", "Currency") := list(AmountHUF, "HUF")]
   return(dt)
 }
 
@@ -157,16 +162,21 @@ check.column <- function(dataAll, dataCurrent, colName) {
   # Returns:
   #   Nothing. Throws an error if unknown value found.
   catAll <- unique(dataAll[[colName]])
-  catAct <- unique(dataCurrent[[colName]])
-  catWrong <- catAct[sapply(catAct, function(x) is.na(match(x, catAll)))]
-  if (length(catWrong) > 0) {
-    cat(paste0("Unknown ", colName, " found\n"))
-    print(catWrong)
-    stop()
+  catAct <- unique(dataCurrent[[!is.na(colName), colName]])
+  # browser()
+  if (!is.na(catAct)) {
+    catWrong <- catAct[sapply(catAct, function(x) is.na(match(x, catAll)))]
+    if (length(catWrong) > 0) {
+      browser()
+      cat(paste0("Unknown ", colName, " found\n"))
+      print(catWrong)
+      stop()
+    }
   }
 }
 
-add.category <- function(dt, bcData, patternData, manData, verbose = F) {
+add.category <- function(dt, bcData, patternData, manData, skip = T,
+  verbose = F) {
   # Add category for transactions
   #
   # Add category for transactions based on the following hierarchy:
@@ -179,22 +189,47 @@ add.category <- function(dt, bcData, patternData, manData, verbose = F) {
   #   bcData: data.table with BlueCoins transactions
   #   patternData: data.table containing patterns 
   #   manData: data.table with manual transactions
+  #   skip: if TRUE skip rows where Category is not NA
   #   verbose: print additional information
   #
   # Returns:
   #   dt: data.table
-  patterns <- patternData[, Pattern]
-  dt <- dt[, Category := NA]
-  dt[, Category := mapply(function(detail, huf, date, account) {
-    if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
-    catBC <- get.category.data(bcData, huf, date, account, verbose = verbose)
-    if (!is.na(catBC)) return(catBC)
-    catPtn <- get.category.pattern(detail, patternData, verbose = verbose)
-    if (!is.na(catPtn)) return(catPtn)
-    catMan <- get.category.manual(manData, huf, date, account, verbose = T)
-    if (!is.na(catMan)) return(catMan)
-    return(NA)
-    }, Details, AmountHUF, Date, Account)]
+  # dt <- dt[, Category := character()]
+  # dt <- dt[, Source := character()]
+  
+  for (row in 1:nrow(dt)) {
+    if (!is.na(dt[row, Category]) | !skip) {
+      huf <- dt[row, AmountHUF]
+      detail  <- dt[row, Details]
+      date  <- dt[row, Date]
+      account  <- dt[row, Account]
+
+      if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
+      # browser()
+      # 1) From BlueCoins transations
+      catBC <- get.category.data(bcData, huf, date, account, verbose = verbose)
+      if (!is.na(catBC)) {
+        dt[row, c("Category", "Source") := list(catBC, "BlueCoins")]
+        next
+      }
+
+      # 2) Based on patterns
+      catPtn <- get.category.pattern(detail, patternData, verbose = verbose)
+      if (!is.na(catPtn)) {
+        dt[row, c("Category", "Source") := list(catPtn, "Patterns")]
+        next
+      }
+
+      # 3) From manual transations
+      catMan <- get.category.manual(manData, huf, date, account, verbose = T)
+      if (!is.na(catMan)){
+        dt[row, c("Category", "Source") := list(catMan, "Manual")]
+        next
+      }
+    }
+  }
+  # browser()
+  # View(dt)
   dt <- dt[,.(Category = unlist(Category)), by = setdiff(names(dt), 'Category')]
   return(dt)
 }
@@ -239,13 +274,15 @@ get.category.pattern <- function(detail, patternData, verbose = F) {
   #   catPtn: category
   catPtn <- NA
   patterns <- patternData[,Pattern]
-  matchResults <- sapply(patterns, grepl, detail)
+  matchResults <- sapply(patterns, grepl, detail, fixed = T)
   matchResults <- matchResults[matchResults == T]
-  if (sum(matchResults) > 1) {
-    cat(c("Multiple match for", names(matchResults), "in\n", detail))
+  catPtnAll <- patternData[Pattern %in% names(matchResults), Category]
+  if (length(unique(catPtnAll)) > 1) {
+    cat(paste0("\nMultiple match: '", names(matchResults), "' in\n", detail))
+    browser()
     stop()
-  } else if (sum(matchResults) == 1) {
-    catPtn <- patternData[Pattern == names(matchResults), Category]
+  } else if (length(unique(catPtnAll)) == 1) {
+    catPtn <- unique(catPtnAll)
     if (verbose) cat(paste0("\t'", catPtn, "' based on '", names(matchResults), "'\n"))
   }
   return(catPtn)
@@ -291,7 +328,17 @@ get.data.all <- function(dt, file, empty = F, verbose = F) {
   dt$all <- read.data(file, verbose = (!empty & verbose))
   if (empty) {
     if (verbose) cat("read empty data.table for dt$all")
-    dt$all <- dt$all[0,]
+    dt$all <- data.table(Account = character(),
+                         Date = character(),
+                         Month = numeric(),
+                         Category = character(),
+                         Source = character(),
+                         Amount = numeric(),
+                         Currency = character(),
+                         AmountHUF = numeric(),
+                         AmountUSD = numeric(),
+                         Details = character())
+    # browser()
   }
   return(dt)
 }
@@ -363,10 +410,7 @@ get.data.uni <- function(dt, file, verbose = F) {
   #   dt: list of data.tables
   dt$uni <- read.unicredit(file, dt$year, dt$fx, dt$rules, verbose = verbose)
   patterns <- dt$patterns[Type == "Unicredit"]
-  dt$uni <- add.category(dt$uni, dt$bc, patterns, dt$manual, verbose = F)
-  dtNA <- dt$uni[is.na(Category), ]
-  dtNotNA <- dt$uni[!is.na(Category), ]
-  dt$manual <- add.data(dt$manual, dtNA, name = "dt$manual", verbose = verbose)
-  dt$all <- add.data(dt$all, dtNotNA, name = "dt$all", verbose = verbose)
+  dt$uni <- add.category(dt$uni, dt$bc, patterns, dt$manual, skip = F, verbose = F)
+  dt$all <- add.data(dt$all, dt$uni, name = "dt$all", verbose = verbose)
   return(dt)
 }

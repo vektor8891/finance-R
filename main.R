@@ -6,7 +6,7 @@
 # Year: 2019
 # Licence: MIT
 
-# TODO: exclude categories where patterns found
+# TODO: merge get.data.all
 
 source("read.R")
 
@@ -19,7 +19,7 @@ fileRenameRules <- "input/rename_rules.csv"
 fileBluecoins <- "reports/transactions_list_table.csv"
 fileUnicredit <- "reports/export_07_02_2019.xls"
 fileTransAll <- "output/transactions_all.csv"
-fileTransManual <- "output/transactions_manual.csv"
+fileTransManual <- "output/transactions_missing.csv"
 
 # Read data
 dt <- list("year" = 2019)
@@ -33,8 +33,8 @@ dt <- get.data.all(dt, fileTransAll, empty = T, verbose = T)
 dt <- get.data.manual(dt, fileTransManual, empty = T, verbose = T)
 dt <- get.data.bc(dt, fileBluecoins, verbose = T)
 dt <- get.data.uni(dt, fileUnicredit, verbose = T)
-export.data(dt$all, fileTransAll, verbose = T)
-export.data(dt$manual, fileTransManual, verbose = T)
+export.data(setorder(dt$all, Date), fileTransAll, verbose = T)
+export.data(setorder(dt$all, Category)[is.na(Category) | Source == "Manual"], fileTransManual, verbose = T)
 # browser()
 
 # # # Summarize data

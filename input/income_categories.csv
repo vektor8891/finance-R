@@ -40,6 +40,7 @@ COSTS ,Shopping - SHP ,SHP-Toiletries
 COSTS ,Shopping - SHP ,SHP-Baby
 COSTS ,Shopping - SHP ,SHP-Other
 COSTS ,Savings ,Fundamenta
+COSTS ,Savings ,Generali
 COSTS ,Savings ,IRA
 COSTS ,Savings ,Signal
 COSTS ,Savings ,UniSaving
@@ -50,6 +51,7 @@ COSTS ,Donations ,Donation sent
 COSTS ,Other ,Bank fee
 COSTS ,Other ,Transfer
 COSTS ,Other ,We don't know!
+COSTS ,Other ,Pending payment
 INCOME,Payment ,Payment-V
 INCOME,Payment ,Payment-M
 INCOME,Other ,Gifts received
