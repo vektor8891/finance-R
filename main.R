@@ -15,6 +15,8 @@ fileIncomeCat <- "input/income_categories.csv"
 fileBalanceCat <- "input/balance_categories.csv"
 filePatterns <- "input/patterns.csv"
 fileRenameRules <- "input/rename_rules.csv"
+fileFXRates <- "input/fx_rates.csv"
+fileCash <- "input/cash_inventory.csv"
 
 fileBluecoins <- "reports/transactions_list_table.csv"
 fileUnicredit <- "reports/export_07_02_2019.xls"
@@ -23,16 +25,20 @@ fileTransManual <- "output/transactions_missing.csv"
 
 # Read data
 dt <- list("year" = 2019)
-dt$fx <- c("USD" = 280, "EUR" = 260)
 dt$rules <- read.data(fileRenameRules)
 dt$income <- read.data(fileIncomeCat)
-dt$balance <- read.data(fileBalanceCat, dec = ",")
 dt$patterns <- read.data(filePatterns)
 
 dt <- get.data.all(dt, fileTransAll, empty = T, verbose = T)
+dt <- get.data.fx(dt, fileFXRates, verbose = T)
+dt <- get.data.balance(dt, fileBalanceCat, verbose = T)
 dt <- get.data.manual(dt, fileTransManual, empty = T, verbose = T)
 dt <- get.data.bc(dt, fileBluecoins, verbose = T)
 dt <- get.data.uni(dt, fileUnicredit, verbose = T)
+dt <- get.data.notes(dt, fileCash, verbose = T)
+
+dt <- check.data(dt, verbose = T)
+
 export.data(setorder(dt$all, Date), fileTransAll, verbose = T)
 export.data(setorder(dt$all, Category)[is.na(Category) | Source == "Manual"], fileTransManual, verbose = T)
 # browser()

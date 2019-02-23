@@ -343,6 +343,43 @@ get.data.all <- function(dt, file, empty = F, verbose = F) {
   return(dt)
 }
 
+get.data.fx <- function(dt, file, verbose = F) {
+  # Get FX rates
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  fxRates <- read.data(file)
+  dt$fx <- setNames(fxRates$FXRate, fxRates$Currency)
+  if (verbose) {
+    cat("FX rates:\n")
+    print(fxRates)
+  }
+  return(dt)
+}
+
+get.data.balance <- function(dt, file, verbose = F) {
+  # Get balance sheet data
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  dt$balance <- read.data(file)
+  dt$balance[, InitialHUF := HUF + USD * dt$fx["USD"] + EUR * dt$fx["EUR"]]
+  dt$balance[, InitialUSD := round(InitialHUF / dt$fx["USD"], 2)]
+  dt$balance[, c("AmountHUF", "AmountUSD", "CurrentHUF", "CurrentUSD") := 0]
+  return(dt)
+}
+
+
 get.data.manual <- function(dt, file, empty = F, verbose = F) {
   # Get manual transactions or empty data.table
   #
@@ -388,8 +425,10 @@ get.data.bc <- function(dt, file, verbose = F) {
   dt$bc <- read.bluecoins(file, dt$year, dt$fx, dt$rules, verbose = T)
   check.column(dt$income, dt$bc, "Category")
   check.column(dt$balance, dt$bc, "Account")
-  dtCash <- dt$bc[Account == "Cash"]
-  dt$all <- add.data(dt$all, dtCash, name = "dt$all", verbose = T)
+  cash <- dt$bc[Account == "Cash"]
+  dt$balance[Account == "Cash", AmountHUF := sum(cash[, AmountHUF])]
+  dt$balance[Account == "Cash", AmountUSD := sum(cash[, AmountUSD])]
+  dt$all <- add.data(dt$all, cash, name = "dt$all", verbose = T)
   return(dt)
 }
 
@@ -410,7 +449,63 @@ get.data.uni <- function(dt, file, verbose = F) {
   #   dt: list of data.tables
   dt$uni <- read.unicredit(file, dt$year, dt$fx, dt$rules, verbose = verbose)
   patterns <- dt$patterns[Type == "Unicredit"]
-  dt$uni <- add.category(dt$uni, dt$bc, patterns, dt$manual, skip = F, verbose = F)
+  dt$uni <- add.category(dt$uni, dt$bc, patterns, dt$manual, skip = F,
+                         verbose = F)
+  dt$balance[Account == "V.Uni", AmountHUF := sum(dt$uni[, AmountHUF])]
+  dt$balance[Account == "V.Uni", AmountUSD := sum(dt$uni[, AmountUSD])]
   dt$all <- add.data(dt$all, dt$uni, name = "dt$all", verbose = verbose)
+  return(dt)
+}
+
+get.data.notes <- function(dt, file, verbose = F) {
+  # Get data from cash inventory
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $fx: FX rates
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  cash <- read.data(file)
+  cash[, AmountHUF := Notional * Amount * dt$fx[Currency]]
+  cash[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
+  if (nrow(cash[is.na(AmountHUF), ]) > 0) {
+    cat("Error: cash conversion failed:\n")
+    print(cash[is.na(AmountHUF), ])
+    stop()
+  }
+  dt$notesHUF <- sum(cash[, AmountHUF])
+  dt$notesUSD <- sum(cash[, AmountUSD])
+  if (verbose) {
+    cat(paste0("Notes HUF: ", dt$notesHUF, "\nNotes USD: ", dt$notesUSD))
+  }
+  return(dt)
+}
+
+check.data <- function(dt, verbose = F) {
+  # Get cash transactions
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $fx: FX rates
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  dt$balance[, CurrentHUF := InitialHUF + AmountHUF]
+  dt$balance[, CurrentUSD := InitialUSD + AmountUSD]
+  cash <- dt$balance[Account == "Cash"]
+  if (cash[, CurrentHUF] != dt$notesHUF) {
+    cat("Notes and cash transactions don't match:\n",
+        "1. Initial:\t\t", cash[, InitialHUF], "\n",
+        "2. Transactions:\t", cash[, AmountHUF], "\n",
+        "3. Current (1+2):\t", cash[, CurrentHUF], "\n",
+        "4. Notes:\t\t", dt$notesHUF, "\n",
+        "5. Difference (4-3):\t", cash[, CurrentHUF] - dt$notesHUF, "\n")
+    stop()
+  }
   return(dt)
 }

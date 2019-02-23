@@ -1,17 +1,17 @@
-Type;Group;Account;HUF;USD;EUR
-ASSETS;Current assets;Cash;19310;4,02;27,17
-ASSETS;Current assets;M.5/3C;0;3813,65;0
-ASSETS;Current assets;V.Uni;340057,11;0;0
-ASSETS;Current assets;V.OTP;131470;0;0
-ASSETS;Current assets;M.5/3S;0;1401,73;0
-ASSETS;Current assets;V.UniS1;50000,23;0;0
-ASSETS;Current assets;V.UniS2;0;0;0
-ASSETS;Current assets;V.EP;0;0;0
-ASSETS;Investments;IRA;0;150;0
-ASSETS;Investments;UniSaving;126189,64;0;0
-ASSETS;Investments;Signal;60000;0;0
-ASSETS;Investments;Fundamenta;92650;0;0
-LIABILITIES;Current;M.C1;0;0;0
-LIABILITIES;Current;Other loans;0;0;0
-LIABILITIES;Long term;Navient;0;14321,71;0
-LIABILITIES;Long term;Great Lakes;0;32825,83;0
+Type,Group,Account,HUF,USD,EUR
+ASSETS,Current assets,Cash,19310,4.02,27.17
+ASSETS,Current assets,M.5/3C,0,3813.65,0
+ASSETS,Current assets,V.Uni,340057.11,0,0
+ASSETS,Current assets,V.OTP,131470,0,0
+ASSETS,Current assets,M.5/3S,0,1401.73,0
+ASSETS,Current assets,V.UniS1,50000.23,0,0
+ASSETS,Current assets,V.UniS2,0,0,0
+ASSETS,Current assets,V.EP,0,0,0
+ASSETS,Investments,IRA,0,150,0
+ASSETS,Investments,UniSaving,126189.64,0,0
+ASSETS,Investments,Signal,60000,0,0
+ASSETS,Investments,Fundamenta,92650,0,0
+LIABILITIES,Current,M.C1,0,0,0
+LIABILITIES,Current,Other loans,0,0,0
+LIABILITIES,Long term,Navient,0,14321.71,0
+LIABILITIES,Long term,Great Lakes,0,32825.83,0
