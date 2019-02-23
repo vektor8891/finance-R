@@ -362,23 +362,23 @@ get.data.fx <- function(dt, file, verbose = F) {
   return(dt)
 }
 
-get.data.balance <- function(dt, file, verbose = F) {
-  # Get balance sheet data
+get.data.balance <- function(dt, fileInit, fileYear, verbose = F) {
+  # Get initial balance sheet data
   #
   # Args:
   #   dt: list of data.tables
-  #   file: path to file
+  #   fileInit: path to initial balance file
+  #   fileYear: file containing monthly balances
   #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
-  dt$balance <- read.data(file)
-  dt$balance[, InitialHUF := HUF + USD * dt$fx["USD"] + EUR * dt$fx["EUR"]]
-  dt$balance[, InitialUSD := round(InitialHUF / dt$fx["USD"], 2)]
-  dt$balance[, c("AmountHUF", "AmountUSD", "CurrentHUF", "CurrentUSD") := 0]
+  dt$initBalance <- read.data(fileInit)
+  dt$initBalance[, InitialHUF := HUF + USD * dt$fx["USD"] + EUR * dt$fx["EUR"]]
+  dt$initBalance[, InitialUSD := round(InitialHUF / dt$fx["USD"], 2)]
+  dt$yearBalance <- read.data(fileYear)
   return(dt)
 }
-
 
 get.data.manual <- function(dt, file, empty = F, verbose = F) {
   # Get manual transactions or empty data.table
@@ -397,7 +397,7 @@ get.data.manual <- function(dt, file, empty = F, verbose = F) {
   } else {
     dt$manual <- read.data(file, verbose = (!empty & verbose))
     check.column(dt$income, dt$manual[!is.na(Category)], "Category")
-    check.column(dt$balance, dt$manual, "Account")
+    check.column(dt$initBalance, dt$manual, "Account")
     dtDup <- dt$manual[duplicated(dt$manual), ]
     if (nrow(dtDup) > 0) {
       dt$manual <- dt$manual[!duplicated(dt$manual), ]
@@ -424,10 +424,8 @@ get.data.bc <- function(dt, file, verbose = F) {
   #   dt: list of data.tables
   dt$bc <- read.bluecoins(file, dt$year, dt$fx, dt$rules, verbose = T)
   check.column(dt$income, dt$bc, "Category")
-  check.column(dt$balance, dt$bc, "Account")
+  check.column(dt$initBalance, dt$bc, "Account")
   cash <- dt$bc[Account == "Cash"]
-  dt$balance[Account == "Cash", AmountHUF := sum(cash[, AmountHUF])]
-  dt$balance[Account == "Cash", AmountUSD := sum(cash[, AmountUSD])]
   dt$all <- add.data(dt$all, cash, name = "dt$all", verbose = T)
   return(dt)
 }
@@ -451,8 +449,6 @@ get.data.uni <- function(dt, file, verbose = F) {
   patterns <- dt$patterns[Type == "Unicredit"]
   dt$uni <- add.category(dt$uni, dt$bc, patterns, dt$manual, skip = F,
                          verbose = F)
-  dt$balance[Account == "V.Uni", AmountHUF := sum(dt$uni[, AmountHUF])]
-  dt$balance[Account == "V.Uni", AmountUSD := sum(dt$uni[, AmountUSD])]
   dt$all <- add.data(dt$all, dt$uni, name = "dt$all", verbose = verbose)
   return(dt)
 }
@@ -484,8 +480,12 @@ get.data.notes <- function(dt, file, verbose = F) {
   return(dt)
 }
 
-check.data <- function(dt, verbose = F) {
-  # Get cash transactions
+check.notes <- function(dt, verbose = F) {
+  # Check if notes match with cash transactions
+  #
+  # Compare total value of coins and notes with initial cash balance and
+  # total cash transations. Throws error when amounts don't match. Error
+  # can be manually remidiated by adjusting initial cash balance.
   #
   # Args:
   #   dt: list of data.tables
@@ -495,17 +495,73 @@ check.data <- function(dt, verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  dt$balance[, CurrentHUF := InitialHUF + AmountHUF]
-  dt$balance[, CurrentUSD := InitialUSD + AmountUSD]
-  cash <- dt$balance[Account == "Cash"]
-  if (cash[, CurrentHUF] != dt$notesHUF) {
-    cat("Notes and cash transactions don't match:\n",
-        "1. Initial:\t\t", cash[, InitialHUF], "\n",
-        "2. Transactions:\t", cash[, AmountHUF], "\n",
-        "3. Current (1+2):\t", cash[, CurrentHUF], "\n",
-        "4. Notes:\t\t", dt$notesHUF, "\n",
-        "5. Difference (4-3):\t", cash[, CurrentHUF] - dt$notesHUF, "\n")
+  initialHUF <- dt$initBalance[Account == "Cash", InitialHUF]
+  amountHUF <- sum(dt$all[Account == "Cash", AmountHUF])
+  currentHUF <- initialHUF + amountHUF
+  notesHUF <- dt$notesHUF
+  if (currentHUF != notesHUF) {
+    cat("WARNING: Mismatch between notes and cash transactions!\n",
+        "A. Initial:\t\tHUF ", initialHUF, "\n",
+        "B. Transactions:\tHUF ", amountHUF, "\n",
+        "C. Current (A+B):\tHUF ", currentHUF, "\n",
+        "D. Notes:\t\tHUF ", notesHUF, "\n",
+        "E. Difference (D-C):\tHUF ", currentHUF - notesHUF, "\n",
+        "HINT: to dismiss error adjust initial cash balance with E\n")
     stop()
+  } else if (verbose) cat("PASS: Notes and cash transations match.\n")
+}
+
+check.balance <- function(dt, verbose = F) {
+  # Check if transactions match with balances
+  #
+  # Compare total value of coins and notes with initial cash balance and
+  # total cash transations. Throws error when amounts don't match. Error
+  # can be manually remidiated by adjusting initial cash balance.
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $fx: FX rates
+  #   file: path to file
+  #   verbose: print additional information
+  balance <- dt$yearBalance
+  if (nrow(balance) > 0) {
+    for (row in 1:nrow(balance)) {
+      # browser()
+      account <- balance[row, Account]
+      month <- balance[row, Month]
+      adjustVal <- balance[row, Adjustment]
+      balanceVal <- balance[row, Balance]
+      balanceHUF <- (balanceVal + adjustVal) * dt$fx[balance[row, Currency]]
+      initialHUF <- dt$initBalance[Account == account, InitialHUF]
+      amountHUF <- sum(dt$all[Account == account & Month <= month, AmountHUF])
+      currentHUF <- initialHUF + amountHUF
+      if (currentHUF != balanceHUF) {
+        cat(paste0("WARNING: ", account, " transactions don't match with ",
+                   "balance for month ", month, "!\n",
+                   "A. Initial:\t\tHUF ", initialHUF, "\n",
+                   "B. Transactions:\tHUF ", amountHUF, "\n",
+                   "C. Current (A+B):\tHUF ", currentHUF, "\n",
+                   "D. Balance:\t\tHUF ", balanceHUF, "\n",
+                   "E. Difference (D-C):\tHUF ", currentHUF - balanceHUF, "\n",
+                   "HINT: to dismiss error adjust monthly balance with E\n"))
+        stop()
+      } else if (verbose) {
+        cat(paste0("PASS: ", account, " transactions match with ",
+                   "balance for month ", month, " (Adjustment: HUF ",
+                   adjustVal, ")\n"))
+      }
+    }
   }
-  return(dt)
+}
+
+check.data <- function(dt, verbose = F) {
+  # Get cash transactions
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $fx: FX rates
+  #   file: path to file
+  #   verbose: print additional information
+  check.notes(dt, verbose = verbose)
+  check.balance(dt, verbose = verbose)
 }
