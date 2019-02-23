@@ -380,29 +380,23 @@ get.data.balance <- function(dt, fileInit, fileYear, verbose = F) {
   return(dt)
 }
 
-get.data.manual <- function(dt, file, empty = F, verbose = F) {
+get.data.manual <- function(dt, file, verbose = F) {
   # Get manual transactions or empty data.table
   #
   # Args:
   #   dt: list of data.tables
   #   file: path to file
-  #   empty: if T returns empty data.table
   #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
-  if (empty) {
-    if (verbose) cat("read empty data.table for dt$manual")
-    dt$manual <- dt$all[0,]
-  } else {
-    dt$manual <- read.data(file, verbose = (!empty & verbose))
-    check.column(dt$income, dt$manual[!is.na(Category)], "Category")
-    check.column(dt$initBalance, dt$manual, "Account")
-    dtDup <- dt$manual[duplicated(dt$manual), ]
-    if (nrow(dtDup) > 0) {
-      dt$manual <- dt$manual[!duplicated(dt$manual), ]
-      if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
-    }
+  dt$manual <- read.data(file, verbose = verbose)
+  check.column(dt$income, dt$manual[!is.na(Category)], "Category")
+  check.column(dt$initBalance, dt$manual, "Account")
+  dtDup <- dt$manual[duplicated(dt$manual), ]
+  if (nrow(dtDup) > 0) {
+    dt$manual <- dt$manual[!duplicated(dt$manual), ]
+    if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
   }
   return(dt)
 }

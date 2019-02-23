@@ -1,3 +1,6 @@
+input/initial_balance.csv
+input/cash_inventory.csv
+input/balance_2019.csv
 reports/
 output/
 .Rproj.user/
