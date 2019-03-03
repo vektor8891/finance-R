@@ -6,7 +6,9 @@
 # Year: 2019
 # Licence: MIT
 
-# TODO: merge get.data.all
+# TODO: check whether sum of transfer is 0
+# TODO: create mapping between account name and account number for Unicredit
+# TODO: automatically read all Unicredit exports
 
 source("read.R")
 
@@ -22,7 +24,8 @@ fileCash <- "input/cash_inventory.csv"
 fileBluecoins <- "reports/transactions_list_table.csv"
 fileUnicredit <- "reports/export_07_02_2019.xls"
 fileTransactionAll <- paste0("output/transactions_", year, ".csv")
-fileTransactionManual <- paste0("output/transactions_", year, "_missing.csv")
+fileTransactionManual <- paste0("output/transactions_manual.csv")
+fileTransactionMissing <- paste0("output/transactions_missing.csv")
 
 # Read data
 dt <- list("year" = 2019)
@@ -33,7 +36,7 @@ dt$patterns <- read.data(filePatterns)
 dt <- get.data.all(dt, fileTransactionAll, empty = T, verbose = T)
 dt <- get.data.fx(dt, fileFXRates, verbose = F)
 dt <- get.data.balance(dt, fileInitialBalance, fileYearBalance, verbose = T)
-dt <- get.data.manual(dt, fileTransactionManual, empty = T, verbose = T)
+dt <- get.data.manual(dt, fileTransactionManual, verbose = T)
 dt <- get.data.bc(dt, fileBluecoins, verbose = T)
 dt <- get.data.uni(dt, fileUnicredit, verbose = T)
 dt <- get.data.notes(dt, fileCash, verbose = T)
@@ -41,8 +44,10 @@ dt <- get.data.notes(dt, fileCash, verbose = T)
 check.data(dt, verbose = T)
 
 export.data(setorder(dt$all, Date), fileTransactionAll, verbose = T)
-dtNA <- setorder(dt$all, Category)[is.na(Category) | Source == "Manual"]
-if (nrow(dtNA) > 0) export.data(dtNA, fileTransactionManual, verbose = T)
+dtManual <- setorder(dt$all, Category)[Source == "Manual"]
+dtMissing <- setorder(dt$all, Category)[is.na(Category)]
+if (nrow(dtManual) > 0) export.data(dtManual, fileTransactionManual, TRUE)
+if (nrow(dtMissing) > 0) export.data(dtMissing, fileTransactionMissing, TRUE)
 # browser()
 
 # # # Summarize data

@@ -114,9 +114,8 @@ read.bluecoins <- function(file, year, fxRates, rules, verbose = F) {
   dt <- dt[substr(Date, 1, 4) == year, ]
   dt[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
   dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
-  dt[, AmountHUF := Amount]
-  dt[Currency == "USD", AmountHUF := Amount * fxRates["USD"]]
-  dt[Currency == "EUR", AmountHUF := Amount * fxRates["EUR"]]
+  dt[, Amount := as.numeric(sub(",", ".", Amount, fixed = TRUE))]
+  dt[, AmountHUF := Amount * fxRates[Currency]]
   dt[, AmountUSD := round(AmountHUF / fxRates["USD"], 2)]
   dt[, Source := "BlueCoins"]
   return(dt)
@@ -300,7 +299,10 @@ get.category.manual <- function(manData, huf, date, account, verbose = F) {
   #
   # Returns:
   #   catPtn: category
-  dtFilt <- manData[!is.na(Category) & AmountHUF == huf & Date == date & Account == account]
+  dtFilt <- manData[!is.na(Category)
+                    & AmountHUF == huf
+                    & Date == date
+                    & Account == account]
   if (nrow(dtFilt) == 1) {
     catMan <- dtFilt[1, Category]
     if (verbose) cat(paste0("\n\t'", catMan, "' based on manual edit\n"))
@@ -381,7 +383,10 @@ get.data.balance <- function(dt, fileInit, fileYear, verbose = F) {
 }
 
 get.data.manual <- function(dt, file, verbose = F) {
-  # Get manual transactions or empty data.table
+  # Get list of manual transactions
+  #
+  # Read manual transactions from file. These transactions are NOT added to
+  # final list but only used to find missing categories.
   #
   # Args:
   #   dt: list of data.tables
@@ -391,12 +396,14 @@ get.data.manual <- function(dt, file, verbose = F) {
   # Returns:
   #   dt: list of data.tables
   dt$manual <- read.data(file, verbose = verbose)
-  check.column(dt$income, dt$manual[!is.na(Category)], "Category")
-  check.column(dt$initBalance, dt$manual, "Account")
-  dtDup <- dt$manual[duplicated(dt$manual), ]
-  if (nrow(dtDup) > 0) {
-    dt$manual <- dt$manual[!duplicated(dt$manual), ]
-    if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
+  if (nrow(dt$manual) > 0) {
+    check.column(dt$income, dt$manual[!is.na(Category)], "Category")
+    check.column(dt$initBalance, dt$manual, "Account")
+    dtDup <- dt$manual[duplicated(dt$manual), ]
+    if (nrow(dtDup) > 0) {
+      dt$manual <- dt$manual[!duplicated(dt$manual), ]
+      if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
+    }
   }
   return(dt)
 }
@@ -466,10 +473,24 @@ get.data.notes <- function(dt, file, verbose = F) {
     print(cash[is.na(AmountHUF), ])
     stop()
   }
-  dt$notesHUF <- sum(cash[, AmountHUF])
-  dt$notesUSD <- sum(cash[, AmountUSD])
+  adjustmentColName <- "We don't know!!!"
+  sapply(unique(cash[, Currency]), function (ccy) {
+    adjustmentCcy <- cash[Note == adjustmentColName & Currency == ccy]
+    if (nrow(adjustmentCcy) != 1) {
+      cat(paste0(nrow(adjustmentCcy), " adjustment row(s) with note '",
+                 adjustmentColName, "'found for ", ccy, " (1 expected)\n"))
+      stop()
+    }
+  })
+  dt$adjustmentHUF <- sum(cash[Note == adjustmentColName, AmountHUF])
+  dt$adjustmentUSD <- sum(cash[Note == adjustmentColName, AmountUSD])
+  dt$notesHUF <- sum(cash[Note != adjustmentColName, AmountHUF])
+  dt$notesUSD <- sum(cash[Note != adjustmentColName, AmountUSD])
   if (verbose) {
-    cat(paste0("Notes HUF: ", dt$notesHUF, "\nNotes USD: ", dt$notesUSD))
+    cat(paste0("Notes: ", dt$notesHUF, " HUF\t",
+               "(", dt$notesUSD, " USD)\n",
+               "Adjustment: ", dt$adjustmentHUF, " HUF\t",
+               "(", dt$adjustmentUSD, " USD)\n"))
   }
   return(dt)
 }
@@ -492,17 +513,23 @@ check.notes <- function(dt, verbose = F) {
   initialHUF <- dt$initBalance[Account == "Cash", InitialHUF]
   amountHUF <- sum(dt$all[Account == "Cash", AmountHUF])
   currentHUF <- initialHUF + amountHUF
-  notesHUF <- dt$notesHUF
-  if (currentHUF != notesHUF) {
+  totalHUF <- dt$notesHUF + dt$adjustmentHUF
+  diffHUF <- currentHUF - totalHUF
+  if (currentHUF != totalHUF) {
     cat("WARNING: Mismatch between notes and cash transactions!\n",
         "A. Initial:\t\tHUF ", initialHUF, "\n",
         "B. Transactions:\tHUF ", amountHUF, "\n",
         "C. Current (A+B):\tHUF ", currentHUF, "\n",
-        "D. Notes:\t\tHUF ", notesHUF, "\n",
-        "E. Difference (D-C):\tHUF ", currentHUF - notesHUF, "\n",
-        "HINT: to dismiss error adjust initial cash balance with E\n")
+        "D. Notes:\t\tHUF ", dt$notesHUF, "\n",
+        "E. Adjustment:\t\tHUF ", dt$adjustmentHUF, "\n",
+        "F. Total (D+E):\tHUF ", totalHUF, "\n",
+        "------------------------------------\n",
+        "G. DIFFERENCE (F-C):\tHUF ", diffHUF, "\n",
+        "HINT: to dismiss error change initial cash adjustment to HUF",
+        dt$adjustmentHUF + diffHUF,"(E+G)\n")
     stop()
-  } else if (verbose) cat("PASS: Notes and cash transations match.\n")
+  } else if (verbose) cat("PASS: Notes and cash transations match (adjustment:",
+                          dt$adjustmentHUF, "HUF)\n")
 }
 
 check.balance <- function(dt, verbose = F) {
@@ -541,7 +568,7 @@ check.balance <- function(dt, verbose = F) {
         stop()
       } else if (verbose) {
         cat(paste0("PASS: ", account, " transactions match with ",
-                   "balance for month ", month, " (Adjustment: HUF ",
+                   "balance for month ", month, " (adjustment: HUF ",
                    adjustVal, ")\n"))
       }
     }
