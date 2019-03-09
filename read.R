@@ -30,12 +30,12 @@ rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
   return(d)
 }
 
-read.data <- function(file, dec = ".", encoding = "UTF-8", skip = 0,
+read.data <- function(fn, dec = ".", encoding = "UTF-8", skip = 0,
   verbose = F) {
   # Read data from file
   #
   # Args:
-  #   file: path to file
+  #   fn: path to file
   #   dec: decimal places
   #   encoding: file encoding
   #   skip: number of lines to skip
@@ -43,38 +43,53 @@ read.data <- function(file, dec = ".", encoding = "UTF-8", skip = 0,
   #
   # Returns:
   #   d: data.table
-  fileType <- unlist(strsplit(file, "[.]"))[2]
-  if (fileType == "csv") {
-    d <- fread(file, dec = dec, encoding = encoding)
-  } else if (fileType %in% c("xlsx", "xls")) {
-    d <- as.data.table(read_excel(file, skip = skip))
+  if (file.exists(fn)) {
+    fileType <- unlist(strsplit(fn, "[.]"))[2]
+    if (fileType == "csv") {
+      d <- fread(fn, dec = dec, encoding = encoding)
+    } else if (fileType %in% c("xlsx", "xls")) {
+      d <- as.data.table(read_excel(fn, skip = skip))
+    } else {
+      cat("Unknown filetype:", fileType, "in", fn, "\n")
+      stop()
+    }
+    if (verbose) cat(dim(d)[[1]], "rows imported from:", fn)
+    return(d)
   } else {
-    cat("Unknown filetype:", fileType, "in", file, "\n")
-    stop()
+    if (verbose) cat("File not found:", fn)
+    return(data.table())
   }
-  if (verbose) cat(dim(d)[[1]], "rows imported from:", file)
-  return(d)
 }
 
-export.data <- function(dt, file, encoding = "UTF-8", verbose = F) {
+export.data <- function(dt, fn, encoding = "UTF-8", deleteIfEmpty = F,
+                        verbose = F) {
   # Export data to file
   #
   # Args:
   #   dt: data.table
-  #   file: path to file
+  #   fn: path to file
   #   encoding: file encoding
+  #   deleteIfEmpty: delete file if data table is empty
   #   verbose: print additional information
   #
   # Returns:
   #   d: data.table
-  fileType <- unlist(strsplit(file, "[.]"))[2]
-  if (fileType == "csv") {
-    write.csv(dt, file, fileEncoding = encoding, row.names = FALSE)
+  if (nrow(dt) > 0) {
+    fileType <- unlist(strsplit(fn, "[.]"))[2]
+    if (fileType == "csv") {
+      write.csv(dt, fn, fileEncoding = encoding, row.names = FALSE)
+    } else {
+      cat("Unknown filetype:", fileType, "in", fn, "\n")
+      stop()
+    }
+    if (verbose) cat(dim(dt)[[1]], "rows exported to:", fn, "\n")
   } else {
-    cat("Unknown filetype:", fileType, "in", file, "\n")
-    stop()
+    if (verbose) cat("Data table empty - nothing exported to:", fn, "\n")
+    if (deleteIfEmpty & file.exists(fn)) {
+      file.remove(fn)
+      if (verbose) cat("File deleted:", fn, "\n")
+    }
   }
-  if (verbose) cat(dim(dt)[[1]], "rows exported to:", file)
 }
 
 add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
@@ -220,10 +235,11 @@ add.category <- function(dt, bcData, patternData, manData, skip = T,
       }
 
       # 3) From manual transations
-      catMan <- get.category.manual(manData, huf, date, account, verbose = T)
-      if (!is.na(catMan)){
-        dt[row, c("Category", "Source") := list(catMan, "Manual")]
-        next
+      if (nrow(manData) > 0) {
+        catMan <- get.category.manual(manData, huf, date, account, verbose = T)
+        if (!is.na(catMan)){
+          dt[row, c("Category", "Source") := list(catMan, "Manual")]
+        }
       }
     }
   }
@@ -341,6 +357,30 @@ get.data.all <- function(dt, file, empty = F, verbose = F) {
                          AmountUSD = numeric(),
                          Details = character())
     # browser()
+  }
+  return(dt)
+}
+
+get.data.targets <- function(dt, file, verbose = F) {
+  # Get target amounts for categories
+  #
+  # Targets can be used to check whether the sum of transactions
+  # for a given category are correct
+  # 
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  targetData <- read.data(file)
+  targetData[, TargetHUF := Target * dt$fx[Currency]]
+  dt$targetHUF <- setNames(targetData$TargetHUF, targetData$Category)
+  if (verbose) {
+    cat("Targets:\n")
+    print(targetData)
   }
   return(dt)
 }
@@ -515,7 +555,7 @@ check.notes <- function(dt, verbose = F) {
   currentHUF <- initialHUF + amountHUF
   totalHUF <- dt$notesHUF + dt$adjustmentHUF
   diffHUF <- currentHUF - totalHUF
-  if (currentHUF != totalHUF) {
+  if (abs(diffHUF) > 0.01) {
     cat("WARNING: Mismatch between notes and cash transactions!\n",
         "A. Initial:\t\tHUF ", initialHUF, "\n",
         "B. Transactions:\tHUF ", amountHUF, "\n",
@@ -575,14 +615,47 @@ check.balance <- function(dt, verbose = F) {
   }
 }
 
-check.data <- function(dt, verbose = F) {
+check.category <- function(dt, catName, verbose = F) {
+  # Check if transactions for given category match target
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: all transactions
+  #     $targets: target amounts for each categories
+  #   catName: category name
+  #   verbose: print additional information
+  dtCat <- dt$all[Category == catName, ]
+  catSumHUF <- sum(dtCat[, AmountHUF])
+  if (hasName(dt$targetHUF, catName)) {
+    targetHUF <- dt$targetHUF[catName]
+  } else {
+    targetHUF <- 0
+  }
+  
+  diffHUF <- catSumHUF - targetHUF
+  if (abs(diffHUF) > 0.01) {
+    print(setorder(dtCat, Date))
+    cat(paste0("WARNING: '", catName, "' transactions don't match ",
+               "with target ", targetHUF, " HUF!\n",
+               "HINT: to dismiss error set target to ", diffHUF, " HUF"))
+    stop()
+  } else if (verbose) {
+    cat(paste0("PASS: '", catName, "' transactions match ",
+               "with target ", targetHUF, " HUF\n"))
+  }
+}
+
+
+check.data <- function(dt, targets, verbose = F) {
   # Get cash transactions
   #
   # Args:
   #   dt: list of data.tables
-  #     $fx: FX rates
+  #   targets: target amount
   #   file: path to file
   #   verbose: print additional information
   check.notes(dt, verbose = verbose)
   check.balance(dt, verbose = verbose)
+  check.category(dt, catName = "Withdrawal", verbose = verbose)
+  check.category(dt, catName = "Transfer", verbose = verbose)
 }

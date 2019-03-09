@@ -50,6 +50,8 @@ COSTS ,Loans ,Other loans
 COSTS ,Donations ,Donation sent 
 COSTS ,Other ,Bank fee
 COSTS ,Other ,Transfer
+COSTS ,Other ,Withdrawal
+COSTS ,Other ,Deposit
 COSTS ,Other ,We don't know!
 COSTS ,Other ,Pending payment
 INCOME,Payment ,Payment-V

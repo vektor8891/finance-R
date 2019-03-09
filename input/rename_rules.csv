@@ -1,6 +1,6 @@
 Type;Value;From;To
 BlueCoins;Column;Title;Details
-BlueCoins;Category;(Átvezetés);Transfer
+BlueCoins;Category;(Átvezetés);Withdrawal
 BlueCoins;Account;Unicredit;V.Uni
 Unicredit;Column;Tranzakció részletek;Transaction
 Unicredit;Column;Érték Dátum;Date
