@@ -20,13 +20,11 @@ filePatterns <- "input/patterns.csv"
 fileRenameRules <- "input/rename_rules.csv"
 fileFXRates <- "input/fx_rates.csv"
 fileTargets <- "input/target_categories.csv"
-fileCash <- "input/cash_inventory.csv"
+fileNotes <- "input/cash_inventory.csv"
 
-fileBluecoins <- "reports/transactions_list_table.csv"
-fileBluecoins <- paste0("reports/cash_", year, ".csv")
+fileCash <- paste0("reports/cash_", year, ".csv")
 fileUnicredit <- "reports/export_07_02_2019.xls"
 fileTransactionAll <- paste0("output/transactions_", year, ".csv")
-fileTransactionManual <- paste0("output/transactions_manual.csv")
 fileTransactionMissing <- paste0("output/transactions_missing.csv")
 
 # Read data
@@ -39,17 +37,15 @@ dt <- get.data.all(dt, fileTransactionAll, empty = T, verbose = T)
 dt <- get.data.fx(dt, fileFXRates, verbose = F)
 dt <- get.data.targets(dt, fileTargets, verbose = F)
 dt <- get.data.balance(dt, fileInitialBalance, fileYearBalance, verbose = T)
-dt <- get.data.manual(dt, fileTransactionManual, verbose = T)
-dt <- get.data.bc(dt, fileBluecoins, verbose = T)
-dt <- get.data.uni(dt, fileUnicredit, verbose = T)
-dt <- get.data.notes(dt, fileCash, verbose = T)
+dt <- get.data.cash(dt, fileCash, verbose = T)
+dt <- get.data.unicredit(dt, fileUnicredit, verbose = T)
+dt <- get.data.notes(dt, fileNotes, verbose = T)
 
 check.data(dt, verbose = T)
 
 export.data(setorder(dt$all, Date), fileTransactionAll, verbose = T)
 dtManual <- setorder(dt$all, Category)[Source == "Manual"]
 dtMissing <- setorder(dt$all, Category)[is.na(Category)]
-export.data(dtManual, fileTransactionManual, verbose = T)
 export.data(dtMissing, fileTransactionMissing, deleteIfEmpty = T, verbose = T)
 
 # browser()

@@ -111,8 +111,8 @@ add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
   return(dt)
 }
 
-read.bluecoins <- function(file, year, fxRates, rules, verbose = F) {
-  # Read data from BlueCoins output file for given year
+read.cash <- function(file, year, fxRates, rules, verbose = F) {
+  # Read cash transactions from BlueCoins output file for given year
   #
   # Args:
   #   file: path to file
@@ -125,7 +125,7 @@ read.bluecoins <- function(file, year, fxRates, rules, verbose = F) {
   #   dt: data.table
   dt <- read.data(file, verbose = verbose)
   dt <- dt[, .(Date, Title, Amount, Currency, Category, Account)]
-  dt <- rename.data(dt, rules, "BlueCoins")
+  dt <- rename.data(dt, rules, "Cash")
   dt <- dt[substr(Date, 1, 4) == year, ]
   dt[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
   dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
@@ -189,20 +189,33 @@ check.column <- function(dataAll, dataCurrent, colName) {
   }
 }
 
-add.category <- function(dt, bcData, patternData, manData, skip = T,
-  verbose = F) {
-  # Add category for transactions
+check.duplicates <- function(dt, stop = F, verbose = F) {
+  # Check for duplicate rows in data table
   #
-  # Add category for transactions based on the following hierarchy:
-  #   1) historical data
-  #   2) patterns
-  #   3) manual transactions
+  # Args:
+  #   dt: data.table
+  #   stop: if TRUE, stops if duplicates found
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: data.table without duplicates
+  dtDup <- dt[duplicated(dt), ]
+  if (nrow(dtDup) > 0 & stop) {
+    cat("Error: duplicated transaction(s) found in:", file, "\n")
+    print(dt[duplicated(dt), ])
+    stop()
+  }
+  dt <- dt[!duplicated(dt), ]
+  if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
+  return(dt)
+}
+
+add.category <- function(dt, patternData, skip = T, verbose = F) {
+  # Add category for transactions based on patterns
   #
   # Args:
   #   dt: data.table to check (must contain Detail column)
-  #   bcData: data.table with BlueCoins transactions
   #   patternData: data.table containing patterns 
-  #   manData: data.table with manual transactions
   #   skip: if TRUE skip rows where Category is not NA
   #   verbose: print additional information
   #
@@ -220,26 +233,11 @@ add.category <- function(dt, bcData, patternData, manData, skip = T,
 
       if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
       # browser()
-      # 1) From BlueCoins transations
-      catBC <- get.category.data(bcData, huf, date, account, verbose = verbose)
-      if (!is.na(catBC)) {
-        dt[row, c("Category", "Source") := list(catBC, "BlueCoins")]
-        next
-      }
 
-      # 2) Based on patterns
       catPtn <- get.category.pattern(detail, patternData, verbose = verbose)
       if (!is.na(catPtn)) {
         dt[row, c("Category", "Source") := list(catPtn, "Patterns")]
         next
-      }
-
-      # 3) From manual transations
-      if (nrow(manData) > 0) {
-        catMan <- get.category.manual(manData, huf, date, account, verbose = T)
-        if (!is.na(catMan)){
-          dt[row, c("Category", "Source") := list(catMan, "Manual")]
-        }
       }
     }
   }
@@ -247,34 +245,6 @@ add.category <- function(dt, bcData, patternData, manData, skip = T,
   # View(dt)
   dt <- dt[,.(Category = unlist(Category)), by = setdiff(names(dt), 'Category')]
   return(dt)
-}
-
-get.category.data <- function(bcData, huf, date, account, days = 7, verbose = F) {
-  # Get category for transation from BlueCoins data
-  #
-  # Args:
-  #   bcData: data.table with BlueCoins data
-  #   huf: amount in HUF
-  #   date: transaction date
-  #   account: account name
-  #   days: max number or days to search before date
-  #   verbose: print additional information
-  #
-  # Returns:
-  #   catBC: category
-  catBC <- NA
-  matchRows <- bcData[Account == account & AmountHUF == huf]
-  if (nrow(matchRows) > 0) {
-    for (i in 1:nrow(matchRows)) {
-      dateRow <- matchRows[i, Date]
-      diff <- as.Date(dateRow, "%Y.%m.%d") - as.Date(date, "%Y.%m.%d")
-      if (as.numeric(diff) <= days) {
-        catBC <- matchRows[i, Category]
-        if (verbose) cat(paste0("\t'", catBC, "' based on BC data\n"))
-      }
-    }
-  }
-  return(catBC)
 }
 
 get.category.pattern <- function(detail, patternData, verbose = F) {
@@ -301,35 +271,6 @@ get.category.pattern <- function(detail, patternData, verbose = F) {
     if (verbose) cat(paste0("\t'", catPtn, "' based on '", names(matchResults), "'\n"))
   }
   return(catPtn)
-}
-
-get.category.manual <- function(manData, huf, date, account, verbose = F) {
-  # Get category for transation from manual transactions
-  #
-  # Args:
-  #   manData: data.table with manual transactions
-  #   huf: amount in HUF
-  #   date: transaction date
-  #   account: account name
-  #   verbose: print additional information
-  #
-  # Returns:
-  #   catPtn: category
-  dtFilt <- manData[!is.na(Category)
-                    & AmountHUF == huf
-                    & Date == date
-                    & Account == account]
-  if (nrow(dtFilt) == 1) {
-    catMan <- dtFilt[1, Category]
-    if (verbose) cat(paste0("\n\t'", catMan, "' based on manual edit\n"))
-  } else if (nrow(dtFilt) > 1) {
-    cat("Multiple values found:\n")
-    print(dtFilt)
-    stop()
-  } else {
-    catMan <- NA
-  }
-  return(catMan)
 }
 
 get.data.all <- function(dt, file, empty = F, verbose = F) {
@@ -422,34 +363,8 @@ get.data.balance <- function(dt, fileInit, fileYear, verbose = F) {
   return(dt)
 }
 
-get.data.manual <- function(dt, file, verbose = F) {
-  # Get list of manual transactions
-  #
-  # Read manual transactions from file. These transactions are NOT added to
-  # final list but only used to find missing categories.
-  #
-  # Args:
-  #   dt: list of data.tables
-  #   file: path to file
-  #   verbose: print additional information
-  #
-  # Returns:
-  #   dt: list of data.tables
-  dt$manual <- read.data(file, verbose = verbose)
-  if (nrow(dt$manual) > 0) {
-    check.column(dt$income, dt$manual[!is.na(Category)], "Category")
-    check.column(dt$initBalance, dt$manual, "Account")
-    dtDup <- dt$manual[duplicated(dt$manual), ]
-    if (nrow(dtDup) > 0) {
-      dt$manual <- dt$manual[!duplicated(dt$manual), ]
-      if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
-    }
-  }
-  return(dt)
-}
-
-get.data.bc <- function(dt, file, verbose = F) {
-  # Get BlueCoins transactions
+get.data.cash <- function(dt, file, verbose = F) {
+  # Get cash transactions
   #
   # Args:
   #   dt: list of data.tables
@@ -463,15 +378,19 @@ get.data.bc <- function(dt, file, verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  dt$bc <- read.bluecoins(file, dt$year, dt$fx, dt$rules, verbose = T)
-  check.column(dt$income, dt$bc, "Category")
-  check.column(dt$initBalance, dt$bc, "Account")
-  cash <- dt$bc[Account == "Cash"]
+  cash <- read.cash(file, dt$year, dt$fx, dt$rules, verbose = T)
+  check.column(dt$income, cash, "Category")
+  if (nrow(cash[Account != "Cash"]) > 0) {
+    cat("Error: non-cash transaction(s) found in:", file, "\n")
+    print(cash[Account != "Cash"])
+    stop()
+  }
+  check.duplicates(cash, stop = T, verbose = verbose)
   dt$all <- add.data(dt$all, cash, name = "dt$all", verbose = T)
   return(dt)
 }
 
-get.data.uni <- function(dt, file, verbose = F) {
+get.data.unicredit <- function(dt, file, verbose = F) {
   # Get Unicredit transactions
   #
   # Args:
@@ -488,8 +407,7 @@ get.data.uni <- function(dt, file, verbose = F) {
   #   dt: list of data.tables
   dt$uni <- read.unicredit(file, dt$year, dt$fx, dt$rules, verbose = verbose)
   patterns <- dt$patterns[Type == "Unicredit"]
-  dt$uni <- add.category(dt$uni, dt$bc, patterns, dt$manual, skip = F,
-                         verbose = F)
+  dt$uni <- add.category(dt$uni, patterns, skip = F, verbose = F)
   dt$all <- add.data(dt$all, dt$uni, name = "dt$all", verbose = verbose)
   return(dt)
 }
@@ -646,12 +564,11 @@ check.category <- function(dt, catName, verbose = F) {
 }
 
 
-check.data <- function(dt, targets, verbose = F) {
+check.data <- function(dt, verbose = F) {
   # Get cash transactions
   #
   # Args:
   #   dt: list of data.tables
-  #   targets: target amount
   #   file: path to file
   #   verbose: print additional information
   check.notes(dt, verbose = verbose)
