@@ -25,7 +25,6 @@ fileManual <- "input/manual.csv"
 
 folderReports <- "reports/"
 fileCash <- paste0("reports/cash_", year, ".csv")
-fileTransactionAll <- paste0("output/transactions_", year, ".csv")
 fileTransactionMissing <- paste0("output/transactions_missing.csv")
 
 # Read data
@@ -34,7 +33,7 @@ dt$rules <- read.data(fileRenameRules)
 dt$income <- read.data(fileIncomeCat)
 dt$patterns <- read.data(filePatterns)
 
-dt <- get.data.all(dt, fileTransactionAll, empty = T, verbose = T)
+dt$all <- data.table()
 dt <- get.data.fx(dt, fileFXRates, verbose = F)
 dt <- get.data.targets(dt, fileTargets, verbose = F)
 dt <- get.data.balance(dt, fileInitialBalance, fileYearBalance, verbose = T)
