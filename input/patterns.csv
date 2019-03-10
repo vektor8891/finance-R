@@ -9,16 +9,25 @@ Unicredit;Bank fee;eBanking havi szolgáltatási díj;
 Unicredit;Bank fee;Bankon bel.átut.jut-SpNet;
 Unicredit;Bank fee;Csoportos terhelés díja;
 Unicredit;Bank fee;Bankon bel.áll.megbíz.díj;
+Unicredit;Bank fee;NA | NA | CRT - FTD;
 Unicredit;CLT-New;C&A;
+Unicredit;CLT-New;H&M;
 Unicredit;CLT-New;DDA DISZKONT;
 Unicredit;COM-Internet;DIJNET/MOBILFIZET?S 5.330,00 HUF;
+Unicredit;COM-Internet;DIJNET/MOBILFIZET?S 5.485,00 HUF;
 Unicredit;COM-Telephone;BUDAPEST FELTOLTES;
 Unicredit;COM-Telephone;TELEKOM/MOBIL;
+Unicredit;Deposit;NORMAL DEPOSIT BETÉT;
 Unicredit;Donation sent;Adomány;
+Unicredit;Donation sent;Global Micro Initiative e.V.;
+Unicredit;Donation sent;Joó Christopher Dávid;
+Unicredit;Donation sent;Onézimusz Alapítvány;
+Unicredit;Donation sent;Wycliffe Magyarország;
 Unicredit;Donation sent;DONATION;
 Unicredit;Donation sent;Kevezsda Szilvi;
 Unicredit;Donation sent;OM Philippines;
 Unicredit;Donation sent;1-183;
+Unicredit;Donation sent;Lakatos Róbert;
 Unicredit;EDU-Books;Kindle;
 Unicredit;EDU-Zsebtanar;GSUITE_zse;
 Unicredit;FOOD-Groceries;ALDI;
@@ -33,16 +42,21 @@ Unicredit;Generali;GENERALI;
 Unicredit;HLT-Insurance;8430874429;
 Unicredit;HLT-Pharmacy;FAGYO:NGY PATIKA;
 Unicredit;HLT-Sport;HU-Budaors Tizproba Magyarorszag;
+Unicredit;Interest;Brutto Interest;
 Unicredit;OFF-Legal fees;KORMA'NYABLAK;
 Unicredit;OFF-Legal fees;POSTA;
 Unicredit;OFF-Legal fees;GB-35314369001;Vízum
+Unicredit;OFF-Legal fees;US EMBASSY BUDAPE;Vízum
 Unicredit;OFF-Legal fees;Kincstár(K07);
 Unicredit;Payment-V;Morgan Stanley munkabér utalás;
 Unicredit;Pending payment;NA | NA | 5262 XXXX XXXX 2130 / null;
+Unicredit;Pending payment;NA | NA | 4476 XXXX XXXX 1025 / null;
 Unicredit;REL-Eating out;E'TTEREM;
 Unicredit;REL-Eating out;Nandori es Tarsa Kft.;Cukrászda
 Unicredit;REL-Eating out;WOKZILLA;
+Unicredit;REL-Eating out;HU-BUDAPEST DYALE KFT.;
 Unicredit;REL-Gifts;VIRAGSZALON;
+Unicredit;REL-Gifts;szülinapi ajándék;
 Unicredit;REL-Gifts;ajándék hozzájárulás;
 Unicredit;REL-Gifts;Budapest Csarnok ter 5.;
 Unicredit;SHP-Other;ADMIN.WEBONIC.HU;
@@ -50,10 +64,18 @@ Unicredit;SHP-Other;HUN-BUDAPEST K.KERT 2000 KFT.;Kert
 Unicredit;SHP-Toiletries;DM 020;
 Unicredit;SHP-Toiletries;WWW.BARION.COM/GUEST;Babapárna
 Unicredit;SHP-Toiletries;HORVÁTH EMIL;Babapárna
-Unicredit;Transfer;Szabó Viktor | 11773054-00576712-00000000 | Átutalás;
-Unicredit;Transfer;SZABÓ VIKTOR | 10918001-00000023-19880045 | NA;
+Unicredit;Transfer;Szabó Viktor | 11773054-00576712-00000000 | ;
+Unicredit;Transfer;SZABÓ VIKTOR | 10918001-00000023-19880007 | ;
+Unicredit;Transfer;SZABÓ VIKTOR | 11773054-00576712-00000000 | ;
+Unicredit;Transfer;SZABÓ VIKTOR | 10918001-00000023-19880045 | ;
+Unicredit;Transfer;SZABÓ VIKTOR | 10918001-00000023-19880021 | ;
 Unicredit;Transfer;Projektek;
+Unicredit;Transfer;OTP EGÉSZSÉGPÉNZTÁR;
 Unicredit;Withdrawal;HU-BUDAPEST 89000695 | NA | ATM kifizetés;
+Unicredit;Withdrawal;HU-Budapest Szabadsag ter | NA | ATM kifizetés(;
 Unicredit;Transfer;Megtakarítás;
 Unicredit;TRS-National;VOLANBUSZ;
+Unicredit;TRS-National;NEPLIGET AUTOBUSZ-ALL;
+Unicredit;TRS-National;vonat jegy;
+Unicredit;TRS-National;HU-DEBRECEN MA'V DEBRECEN;
 Unicredit;TRS-Public;BKK AUTOMATA;

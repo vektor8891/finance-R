@@ -1,6 +1,6 @@
 # Finance App
 #
-# This app reads transactions from multiple source and summarizes them.
+# This app reads transactions from multiple sources and summarizes them.
 #
 # Author: Viktor Szabo
 # Year: 2019
@@ -21,9 +21,10 @@ fileRenameRules <- "input/rename_rules.csv"
 fileFXRates <- "input/fx_rates.csv"
 fileTargets <- "input/target_categories.csv"
 fileNotes <- "input/cash_inventory.csv"
+fileManual <- "input/manual.csv"
 
+folderReports <- "reports/"
 fileCash <- paste0("reports/cash_", year, ".csv")
-fileUnicredit <- "reports/export_07_02_2019.xls"
 fileTransactionAll <- paste0("output/transactions_", year, ".csv")
 fileTransactionMissing <- paste0("output/transactions_missing.csv")
 
@@ -37,16 +38,16 @@ dt <- get.data.all(dt, fileTransactionAll, empty = T, verbose = T)
 dt <- get.data.fx(dt, fileFXRates, verbose = F)
 dt <- get.data.targets(dt, fileTargets, verbose = F)
 dt <- get.data.balance(dt, fileInitialBalance, fileYearBalance, verbose = T)
+dt <- get.data.manual(dt, fileManual, verbose = T)
 dt <- get.data.cash(dt, fileCash, verbose = T)
-dt <- get.data.unicredit(dt, fileUnicredit, verbose = T)
+dt <- get.data.unicredit(dt, folderReports, verbose = T)
 dt <- get.data.notes(dt, fileNotes, verbose = T)
 
-check.data(dt, verbose = T)
-
 export.data(setorder(dt$all, Date), fileTransactionAll, verbose = T)
-dtManual <- setorder(dt$all, Category)[Source == "Manual"]
 dtMissing <- setorder(dt$all, Category)[is.na(Category)]
 export.data(dtMissing, fileTransactionMissing, deleteIfEmpty = T, verbose = T)
+
+check.data(dt, showAll = F, verbose = T)
 
 # browser()
 

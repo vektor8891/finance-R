@@ -53,10 +53,10 @@ read.data <- function(fn, dec = ".", encoding = "UTF-8", skip = 0,
       cat("Unknown filetype:", fileType, "in", fn, "\n")
       stop()
     }
-    if (verbose) cat(dim(d)[[1]], "rows imported from:", fn)
+    if (verbose) cat(dim(d)[[1]], "rows imported from:", fn, "\n")
     return(d)
   } else {
-    if (verbose) cat("File not found:", fn)
+    if (verbose) cat("File not found:", fn, "\n")
     return(data.table())
   }
 }
@@ -102,12 +102,9 @@ add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
   #
   # Returns:
   #   dt: data.table
-  # browser()
-  # View(dtAll)
-  # View(dtNew)
   dt <- merge(dtAll, dtNew, all = T)
   newRows <- dim(dt)[[1]] - dim(dtAll)[[1]]
-  if (verbose) cat(paste0("\n", newRows, " new rows added to ", name))
+  if (verbose) cat(paste0("\n", newRows, " new rows added to ", name, "\n"))
   return(dt)
 }
 
@@ -132,7 +129,6 @@ read.cash <- function(file, year, fxRates, rules, verbose = F) {
   dt[, Amount := as.numeric(sub(",", ".", Amount, fixed = TRUE))]
   dt[, AmountHUF := Amount * fxRates[Currency]]
   dt[, AmountUSD := round(AmountHUF / fxRates["USD"], 2)]
-  dt[, Source := "BlueCoins"]
   return(dt)
 }
 
@@ -150,12 +146,10 @@ read.unicredit <- function(fileName, year, fxRates, renameRules, verbose = F) {
   #   dt: data.table
   dt <- read.data(fileName, skip = 3, verbose = verbose)
   dt <- rename.data(dt, renameRules, "Unicredit")
-  # browser()
   dt[, Details := paste0(Partner, " | ",  PartnerAccount, " | ", Transaction)]
-  dt <- dt[, .(Details, Date, Amount)]
-  dt[, c("Category", "Source") := character()]
+  dt <- dt[, .(Account, Details, Date, Amount)]
+  dt[, Category := character()]
   dt <- dt[substr(Date, 1, 4) == year, ]
-  dt <- dt[, Account := "V.Uni"]
   dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
   dt[, AmountHUF := sapply(Amount, function(x) 
     as.numeric(mgsub(c(",", "\u00A0", " HUF"), c(".", "", ""), x))
@@ -177,11 +171,9 @@ check.column <- function(dataAll, dataCurrent, colName) {
   #   Nothing. Throws an error if unknown value found.
   catAll <- unique(dataAll[[colName]])
   catAct <- unique(dataCurrent[[!is.na(colName), colName]])
-  # browser()
   if (!is.na(catAct)) {
     catWrong <- catAct[sapply(catAct, function(x) is.na(match(x, catAll)))]
     if (length(catWrong) > 0) {
-      browser()
       cat(paste0("Unknown ", colName, " found\n"))
       print(catWrong)
       stop()
@@ -189,24 +181,27 @@ check.column <- function(dataAll, dataCurrent, colName) {
   }
 }
 
-check.duplicates <- function(dt, stop = F, verbose = F) {
+check.duplicates <- function(dt, stop = F, remove = T, verbose = F) {
   # Check for duplicate rows in data table
   #
   # Args:
   #   dt: data.table
   #   stop: if TRUE, stops if duplicates found
+  #   remove: remove duplicates if TRUE
   #   verbose: print additional information
   #
   # Returns:
   #   dt: data.table without duplicates
   dtDup <- dt[duplicated(dt), ]
   if (nrow(dtDup) > 0 & stop) {
-    cat("Error: duplicated transaction(s) found in:", file, "\n")
+    cat("Error: duplicated transaction(s) found in data.table\n")
     print(dt[duplicated(dt), ])
     stop()
   }
-  dt <- dt[!duplicated(dt), ]
-  if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
+  if (remove) {
+    dt <- dt[!duplicated(dt), ]
+    if (verbose) cat(c("\n", dim(dtDup)[[1]], "duplicate(s) removed"))
+  }
   return(dt)
 }
 
@@ -221,28 +216,20 @@ add.category <- function(dt, patternData, skip = T, verbose = F) {
   #
   # Returns:
   #   dt: data.table
-  # dt <- dt[, Category := character()]
-  # dt <- dt[, Source := character()]
-  
   for (row in 1:nrow(dt)) {
     if (!is.na(dt[row, Category]) | !skip) {
       huf <- dt[row, AmountHUF]
       detail  <- dt[row, Details]
       date  <- dt[row, Date]
       account  <- dt[row, Account]
-
       if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
-      # browser()
-
       catPtn <- get.category.pattern(detail, patternData, verbose = verbose)
       if (!is.na(catPtn)) {
-        dt[row, c("Category", "Source") := list(catPtn, "Patterns")]
+        dt[row, Category := catPtn]
         next
       }
     }
   }
-  # browser()
-  # View(dt)
   dt <- dt[,.(Category = unlist(Category)), by = setdiff(names(dt), 'Category')]
   return(dt)
 }
@@ -264,7 +251,6 @@ get.category.pattern <- function(detail, patternData, verbose = F) {
   catPtnAll <- patternData[Pattern %in% names(matchResults), Category]
   if (length(unique(catPtnAll)) > 1) {
     cat(paste0("\nMultiple match: '", names(matchResults), "' in\n", detail))
-    browser()
     stop()
   } else if (length(unique(catPtnAll)) == 1) {
     catPtn <- unique(catPtnAll)
@@ -291,13 +277,11 @@ get.data.all <- function(dt, file, empty = F, verbose = F) {
                          Date = character(),
                          Month = numeric(),
                          Category = character(),
-                         Source = character(),
                          Amount = numeric(),
                          Currency = character(),
                          AmountHUF = numeric(),
                          AmountUSD = numeric(),
                          Details = character())
-    # browser()
   }
   return(dt)
 }
@@ -363,6 +347,34 @@ get.data.balance <- function(dt, fileInit, fileYear, verbose = F) {
   return(dt)
 }
 
+get.data.manual <- function(dt, file, verbose = F) {
+  # Get manually added transactions
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $rules: renaming rules
+  #     $income: income categories
+  #     $balance: balance categories
+  #     $year: year to check
+  #     $fx: FX rates
+  #   file: path to file
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  manual <- read.data(file, verbose = verbose)
+  manual <- manual[substr(Date, 1, 4) == dt$year, ]
+  manual[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
+  manual[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
+  manual[, AmountHUF := Amount * dt$fx[Currency]]
+  manual[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
+  check.column(dt$income, manual, "Category")
+  check.column(dt$initBalance, manual, "Account")
+  check.duplicates(manual, stop = F, remove = F, verbose = verbose)
+  dt$all <- add.data(dt$all, manual, name = "dt$all", verbose = T)
+  return(dt)
+}
+
 get.data.cash <- function(dt, file, verbose = F) {
   # Get cash transactions
   #
@@ -390,8 +402,10 @@ get.data.cash <- function(dt, file, verbose = F) {
   return(dt)
 }
 
-get.data.unicredit <- function(dt, file, verbose = F) {
+get.data.unicredit <- function(dt, folder, verbose = F) {
   # Get Unicredit transactions
+  #
+  # Scan through all files in folder containing "Unicredit"
   #
   # Args:
   #   dt: list of data.tables
@@ -405,7 +419,21 @@ get.data.unicredit <- function(dt, file, verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  dt$uni <- read.unicredit(file, dt$year, dt$fx, dt$rules, verbose = verbose)
+  uniAll <- data.table()
+  for (fn in list.files(path = folder)) {
+    if (grepl("unicredit", tolower(fn), fixed = TRUE)) {
+      path <- paste0(folder, fn)
+      dtUni <- read.unicredit(path, dt$year, dt$fx, dt$rules, verbose = verbose)
+      if (nrow(uniAll) == 0) {
+        uniAll <- dtUni[FALSE]
+      }
+      uniAll <- add.data(uniAll, dtUni, name = "unicredit", verbose = verbose)
+    }
+  }
+  check.column(dt$income, uniAll, "Category")
+  check.column(dt$initBalance, uniAll, "Account")
+  check.duplicates(uniAll, stop = F, verbose = verbose)
+  dt$uni <- uniAll
   patterns <- dt$patterns[Type == "Unicredit"]
   dt$uni <- add.category(dt$uni, patterns, skip = F, verbose = F)
   dt$all <- add.data(dt$all, dt$uni, name = "dt$all", verbose = verbose)
@@ -505,7 +533,6 @@ check.balance <- function(dt, verbose = F) {
   balance <- dt$yearBalance
   if (nrow(balance) > 0) {
     for (row in 1:nrow(balance)) {
-      # browser()
       account <- balance[row, Account]
       month <- balance[row, Month]
       adjustVal <- balance[row, Adjustment]
@@ -514,7 +541,8 @@ check.balance <- function(dt, verbose = F) {
       initialHUF <- dt$initBalance[Account == account, InitialHUF]
       amountHUF <- sum(dt$all[Account == account & Month <= month, AmountHUF])
       currentHUF <- initialHUF + amountHUF
-      if (currentHUF != balanceHUF) {
+      diffHUF <- currentHUF - balanceHUF
+      if (abs(diffHUF) > 0.01) {
         cat(paste0("WARNING: ", account, " transactions don't match with ",
                    "balance for month ", month, "!\n",
                    "A. Initial:\t\tHUF ", initialHUF, "\n",
@@ -522,7 +550,7 @@ check.balance <- function(dt, verbose = F) {
                    "C. Current (A+B):\tHUF ", currentHUF, "\n",
                    "D. Balance:\t\tHUF ", balanceHUF, "\n",
                    "E. Difference (D-C):\tHUF ", currentHUF - balanceHUF, "\n",
-                   "HINT: to dismiss error adjust monthly balance with E\n"))
+                   "HINT: to dismiss error adjust monthly balance with C\n"))
         stop()
       } else if (verbose) {
         cat(paste0("PASS: ", account, " transactions match with ",
@@ -533,7 +561,40 @@ check.balance <- function(dt, verbose = F) {
   }
 }
 
-check.category <- function(dt, catName, verbose = F) {
+find.pairs <- function(dt, days = 7, verbose = F) {
+  # Find transation with same amount within date range
+  #
+  # Args:
+  #   dt: data.table of transactions
+  #   days: length of date range
+  #   verbose: print additional information
+  #
+  # Return:
+  #   dt: data.table with HasPair column
+  dt$HasPair <- FALSE
+  dt$RowID <- 1:nrow(dt)
+  setorder(dt, Date)
+  for (row in 1:nrow(dt)) {
+    if (!dt[row, HasPair]) {
+      huf <- dt[row, AmountHUF]
+      date  <- dt[row, Date]
+      account  <- dt[row, Account]
+      pairRows <- dt[Account != account & AmountHUF == -huf & !HasPair]
+      if (nrow(pairRows) > 0) {
+        dateRow <- pairRows[1, Date]
+        diff <- as.Date(dateRow, "%Y.%m.%d") - as.Date(date, "%Y.%m.%d")
+        if (abs(as.numeric(diff)) <= days) {
+          dt[row, HasPair := TRUE]
+          dt[RowID == pairRows[1, RowID], HasPair := TRUE]
+          if (verbose) cat(paste0("Pair found for ", huf, "HUF (", date, ")\n"))
+        }
+      }
+    }
+  }
+  return(dt[, RowID := NULL])
+}
+
+check.category <- function(dt, catName, showAll = F, verbose = F) {
   # Check if transactions for given category match target
   #
   # Args:
@@ -541,21 +602,22 @@ check.category <- function(dt, catName, verbose = F) {
   #     $all: all transactions
   #     $targets: target amounts for each categories
   #   catName: category name
+  #   showAll: if TRUE, shows all transactions if no match. if FALSE, shows only
+  #     those transactions where that have no opposite transaction
   #   verbose: print additional information
   dtCat <- dt$all[Category == catName, ]
+  dtCat <- find.pairs(dtCat, verbose = F)
   catSumHUF <- sum(dtCat[, AmountHUF])
-  if (hasName(dt$targetHUF, catName)) {
-    targetHUF <- dt$targetHUF[catName]
-  } else {
-    targetHUF <- 0
-  }
-  
+  targetHUF <- 0
+  if (hasName(dt$targetHUF, catName)) targetHUF <- dt$targetHUF[catName]
   diffHUF <- catSumHUF - targetHUF
   if (abs(diffHUF) > 0.01) {
-    print(setorder(dtCat, Date))
+    setorder(dtCat[HasPair == FALSE], Date)
+    if (showAll) print(dtCat) else print(dtCat[HasPair == FALSE])
     cat(paste0("WARNING: '", catName, "' transactions don't match ",
                "with target ", targetHUF, " HUF!\n",
-               "HINT: to dismiss error set target to ", diffHUF, " HUF"))
+               "HINT: to dismiss error set target to ",
+               as.numeric(catSumHUF), " HUF"))
     stop()
   } else if (verbose) {
     cat(paste0("PASS: '", catName, "' transactions match ",
@@ -564,15 +626,16 @@ check.category <- function(dt, catName, verbose = F) {
 }
 
 
-check.data <- function(dt, verbose = F) {
+check.data <- function(dt, showAll = F, verbose = F) {
   # Get cash transactions
   #
   # Args:
   #   dt: list of data.tables
   #   file: path to file
+  #   showAll: if TRUE, shows all transactions in check.category()
   #   verbose: print additional information
   check.notes(dt, verbose = verbose)
   check.balance(dt, verbose = verbose)
   check.category(dt, catName = "Withdrawal", verbose = verbose)
-  check.category(dt, catName = "Transfer", verbose = verbose)
+  check.category(dt, catName = "Transfer", showAll = showAll, verbose = verbose)
 }

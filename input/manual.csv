@@ -1,0 +1,10 @@
+"Account","Date","Category","Currency","Amount","Details"
+"OTP","2019.01.02","Transfer","HUF",47000,"Átutalás"
+"OTP","2019.01.10","Fundamenta","HUF",-20150,
+"OTP","2019.01.10","Signal","HUF",-12600,
+"OTP","2019.02.01","Transfer","HUF",47000,"Átutalás"
+"OTP","2019.02.11","Transfer","HUF",-177272,"Átutalás"
+"OTP","2019.02.10","Signal","HUF",-12600,
+"OTP","2019.02.10","Fundamenta","HUF",-20150,
+"OTP.EP","2019.02.08","Transfer","HUF",2000,"Átutalás"
+"OTP.EP","2019.02.08","Transfer","HUF",2000,"Átutalás"

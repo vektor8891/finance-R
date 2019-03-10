@@ -1,2 +1,8 @@
 Account,Month,Currency,Balance,Adjustment
-V.Uni,1,HUF,1363491.24,0
+Unicredit.Checking,1,HUF,1363491.24,0
+Unicredit.Savings1,1,HUF,50000.01,0
+Unicredit.Savings2,1,HUF,400013.74,0
+Unicredit.Checking,2,HUF,2041912.17,-43319.4
+Unicredit.Savings1,2,HUF,0.18,0
+Unicredit.Savings2,2,HUF,0.74,0
+OTP,2,HUF,0,-17302

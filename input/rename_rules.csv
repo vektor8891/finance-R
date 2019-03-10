@@ -1,8 +1,12 @@
 Type;Value;From;To
 Cash;Column;Title;Details
 Cash;Category;(Átvezetés);Withdrawal
-Cash;Account;Unicredit;V.Uni
+Cash;Account;Unicredit;Unicredit.Checking
 Unicredit;Column;Tranzakció részletek;Transaction
 Unicredit;Column;Érték Dátum;Date
 Unicredit;Column;Összeg;Amount
 Unicredit;Column;Partner Számlaszám;PartnerAccount
+Unicredit;Column;Számlaszám;Account
+Unicredit;Account;10918001-00000023-19880007;Unicredit.Checking
+Unicredit;Account;10918001-00000023-19880021;Unicredit.Savings1
+Unicredit;Account;10918001-00000023-19880045;Unicredit.Savings2

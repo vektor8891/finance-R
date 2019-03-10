@@ -1,11 +1,12 @@
 Type,Group,Account,HUF,USD,EUR
 ASSETS,Current assets,Cash,19310,4.02,27.17
 ASSETS,Current assets,M.5/3C,0,3813.65,0
-ASSETS,Current assets,V.Uni,504226.59,0,0
-ASSETS,Current assets,V.OTP,131470,0,0
+ASSETS,Current assets,Unicredit.Checking,504226.59,0,0
 ASSETS,Current assets,M.5/3S,0,1401.73,0
-ASSETS,Current assets,V.UniS1,50000.23,0,0
-ASSETS,Current assets,V.UniS2,0,0,0
+ASSETS,Current assets,Unicredit.Savings1,0.41,0,0
+ASSETS,Current assets,Unicredit.Savings2,375013.74,0,0
+ASSETS,Current assets,OTP,131470,0,0
+ASSETS,Current assets,OTP.EP,0,0,0
 ASSETS,Current assets,V.EP,0,0,0
 ASSETS,Investments,IRA,0,150,0
 ASSETS,Investments,UniSaving,126189.64,0,0
