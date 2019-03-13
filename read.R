@@ -1,5 +1,6 @@
 library(data.table)
 library(readxl)
+library(writexl)
 library(qdap)
 
 rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
@@ -18,10 +19,14 @@ rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
   
   # Rename columns
   rulesCol <- rulesAll[Type == type & Value == "Column"]
-  setnames(d, rulesCol$From, rulesCol$To)
+  if (nrow(rulesCol) > 0) {
+    if (verbose) cat(nrow(rulesCol), "column(s) renamed")
+    setnames(d, rulesCol$From, rulesCol$To)
+  }
   # Rename values
   rulesVal <- rulesAll[Type == type & Value != "Column"]
   if (nrow(rulesVal) > 0) {
+    if (verbose) cat(nrow(rulesVal), "value(s) renamed")
     for (i in 1:nrow(rulesVal)) {
       d <- d[get(rulesVal[i, Value]) == rulesVal[i, From],
               c(rulesVal[i, Value]) := rulesVal[i, To]]
@@ -30,7 +35,7 @@ rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
   return(d)
 }
 
-read.data <- function(fn, dec = ".", encoding = "UTF-8", skip = 0,
+read.data <- function(fn, folder = "", dec = ".", encoding = "UTF-8", skip = 0,
   verbose = F) {
   # Read data from file
   #
@@ -43,6 +48,8 @@ read.data <- function(fn, dec = ".", encoding = "UTF-8", skip = 0,
   #
   # Returns:
   #   d: data.table
+  if (is.na(skip)) skip <- 0
+  if (folder != "") fn <- paste0(folder, fn)
   if (file.exists(fn)) {
     fileType <- unlist(strsplit(fn, "[.]"))[2]
     if (fileType == "csv") {
@@ -53,7 +60,7 @@ read.data <- function(fn, dec = ".", encoding = "UTF-8", skip = 0,
       cat("Unknown filetype:", fileType, "in", fn, "\n")
       stop()
     }
-    if (verbose) cat(dim(d)[[1]], "rows imported from:", fn, "\n")
+    if (verbose) cat(dim(dt)[[1]], "rows imported from:", fn, "\n")
     return(d)
   } else {
     if (verbose) cat("File not found:", fn, "\n")
@@ -62,7 +69,7 @@ read.data <- function(fn, dec = ".", encoding = "UTF-8", skip = 0,
 }
 
 export.data <- function(dt, fn, encoding = "UTF-8", deleteIfEmpty = F,
-                        verbose = F) {
+                        folder = "", verbose = F) {
   # Export data to file
   #
   # Args:
@@ -74,6 +81,7 @@ export.data <- function(dt, fn, encoding = "UTF-8", deleteIfEmpty = F,
   #
   # Returns:
   #   d: data.table
+  if (folder != "") fn <- paste0(folder, fn)
   if (nrow(dt) > 0) {
     fileType <- unlist(strsplit(fn, "[.]"))[2]
     if (fileType == "csv") {
@@ -109,7 +117,30 @@ add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
   return(dt)
 }
 
-finalize.data <- function(dtAll, dt) {
+get.report.type <- function(dtAll, file, verbose = F) {
+  # Get report type
+  #
+  # Args:
+  #   dtAll: list of data.tables
+  #     $reportTypes: list of report types
+  #   file: file name
+  #   types: report types
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   type: type of report
+  types <- dtAll$reportTypes$Type
+  for (i in 1:length(types)) {
+    if (grepl(tolower(types[i]), tolower(file), fixed = TRUE)) {
+      type <- types[i]
+      if (verbose) cat(paste0("Report type found for ", file, ": ", type, "\n"))
+      return(type)
+    }
+  }
+  if (verbose) cat(paste0("No report type found for ", file, "\n"))
+}
+
+finalize.data <- function(dt, d) {
   # Finalize data
   #
   # - Remove extra columns
@@ -119,27 +150,28 @@ finalize.data <- function(dtAll, dt) {
   # - Check Account/Category values
   #
   # Args:
-  #   dtAll: list of data.tables
+  #   dt: list of data.tables
   #     $year: year for filtering
   #     $fx: FX rates
   #     $income: data.table for categories
   #     $initBalance: data.table for accounts
-  #   dt: data.table to check
+  #   d: data.table to check
   #   checkCol: check columns
   #
   # Returns:
   #   dt: data.table
-  if (!hasName(dt, "Category")) dt[, Category := character()]
-  dt <- dt[, .(Account, Details, Date, Amount, Category, Currency)]
-  dt <- dt[substr(Date, 1, 4) == dtAll$year, ]
-  dt[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
-  dt[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
-  dt[, AmountHUF := Amount * dtAll$fx[Currency]]
-  dt[, AmountUSD := round(AmountHUF / dtAll$fx["USD"], 2)]
-  dt <- add.category(dt, dtAll$patterns, verbose = F)
-  check.column(dtAll$income, dt, "Category")
-  check.column(dtAll$initBalance, dt, "Account")
-  return(dt)
+  # browser()
+  if (!hasName(d, "Category")) d[, Category := character()]
+  d <- d[, .(Account, Details, Date, Amount, Category, Currency)]
+  d <- d[substr(Date, 1, 4) == dt$year, ]
+  d[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
+  d[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
+  d[, AmountHUF := Amount * dt$fx[Currency]]
+  d[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
+  d <- add.category(d, dt$patterns, verbose = F)
+  check.column(dt$income, d, "Category")
+  check.column(dt$initBalance, d, "Account")
+  return(d)
 }
 
 check.column <- function(dataAll, dataCurrent, colName) {
@@ -176,6 +208,8 @@ check.duplicates <- function(dt, threshold = 0, verbose = F) {
   # Returns:
   #   dt: data.table without duplicates
   dtDup <- dt[duplicated(dt), ]
+  if (is.na(threshold)) threshold <- 0
+  if (verbose) cat(paste0("Checking for duplicates (", threshold, " allowed)"))
   if (nrow(dtDup) > threshold) {
     cat("Error: duplicated transaction(s) found in data.table\n")
     print(dtDup)
@@ -223,21 +257,23 @@ get.category.pattern <- function(detail, patternData, verbose = F) {
   # Returns:
   #   catPtn: category
   catPtn <- NA
-  patterns <- patternData[,Pattern]
-  matchResults <- sapply(patterns, grepl, detail, fixed = T)
+  patterns <- patternData[, Pattern]
+  matchResults <- sapply(patterns, grepl, gsub("\u00A0", " ", detail),
+                         fixed = T)
   matchResults <- matchResults[matchResults == T]
-  catPtnAll <- patternData[Pattern %in% names(matchResults), Category]
-  if (length(unique(catPtnAll)) > 1) {
+  catPatternAll <- patternData[Pattern %in% names(matchResults), Category]
+  if (length(unique(catPatternAll)) > 1) {
     cat(paste0("\nMultiple match: '", names(matchResults), "' in\n", detail))
     stop()
-  } else if (length(unique(catPtnAll)) == 1) {
-    catPtn <- unique(catPtnAll)
-    if (verbose) cat(paste0("\t'", catPtn, "' based on '", names(matchResults), "'\n"))
+  } else if (length(unique(catPatternAll)) == 1) {
+    catPtn <- unique(catPatternAll)
+    if (verbose) cat(paste0("\t'", catPtn, "' based on '", names(matchResults),
+                            "'\n"))
   }
   return(catPtn)
 }
 
-get.data.targets <- function(dt, file, verbose = F) {
+get.targets <- function(dt, file, verbose = F) {
   # Get target amounts for categories
   #
   # Targets can be used to check whether the sum of transactions
@@ -246,12 +282,13 @@ get.data.targets <- function(dt, file, verbose = F) {
   #
   # Args:
   #   dt: list of data.tables
+  #     $folderInput: input folder
   #   file: path to file
   #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
-  targetData <- read.data(file)
+  targetData <- read.data(file, folder = dt$folderInput)
   targetData[, TargetHUF := Target * dt$fx[Currency]]
   dt$targetHUF <- setNames(targetData$TargetHUF, targetData$Category)
   if (verbose) {
@@ -261,17 +298,18 @@ get.data.targets <- function(dt, file, verbose = F) {
   return(dt)
 }
 
-get.data.fx <- function(dt, file, verbose = F) {
+get.fx <- function(dt, file, verbose = F) {
   # Get FX rates
   #
   # Args:
   #   dt: list of data.tables
+  #     $folderInput: input folder
   #   file: path to file
   #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
-  fxRates <- read.data(file)
+  fxRates <- read.data(file, folder = dt$folderInput)
   dt$fx <- setNames(fxRates$FXRate, fxRates$Currency)
   if (verbose) {
     cat("FX rates:\n")
@@ -280,25 +318,27 @@ get.data.fx <- function(dt, file, verbose = F) {
   return(dt)
 }
 
-get.data.balance <- function(dt, fileInit, fileYear, verbose = F) {
+get.balance <- function(dt, fileInit, fileYear, verbose = F) {
   # Get initial balance sheet data
   #
   # Args:
   #   dt: list of data.tables
+  #     $folderInput: input folder
+  #     $fx: FX rates
   #   fileInit: path to initial balance file
   #   fileYear: file containing monthly balances
   #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
-  dt$initBalance <- read.data(fileInit)
+  dt$yearBalance <- read.data(fileYear, folder = dt$folderInput)
+  dt$initBalance <- read.data(fileInit, folder = dt$folderInput)
   dt$initBalance[, InitialHUF := HUF + USD * dt$fx["USD"] + EUR * dt$fx["EUR"]]
   dt$initBalance[, InitialUSD := round(InitialHUF / dt$fx["USD"], 2)]
-  dt$yearBalance <- read.data(fileYear)
   return(dt)
 }
 
-get.data.manual <- function(dt, file, verbose = F) {
+get.manual <- function(dt, file, verbose = F) {
   # Get manually added transactions
   #
   # Args:
@@ -321,81 +361,72 @@ get.data.manual <- function(dt, file, verbose = F) {
   return(dt)
 }
 
-get.data.cash <- function(dt, file, verbose = F) {
-  # Get cash transactions
+get.columns <- function(dt, type = "normal") {
+  # Get columns for different report types
   #
   # Args:
-  #   dt: list of data.tables
-  #     $rules: renaming rules
-  #     $income: income categories
-  #     $balance: balance categories
-  #     $year: year to check
-  #     $fx: FX rates
-  #   file: path to file
-  #   verbose: print additional information
+  #   dt: data.table
+  #   type: file type
   #
   # Returns:
   #   dt: list of data.tables
-  cash <- read.data(file, verbose = verbose)
-  cash <- rename.data(cash, dt$rules, "Cash")
-  cash[, Amount := as.numeric(sub(",", ".", Amount, fixed = TRUE))]
-  cash <- finalize.data(dt, cash)
-  check.column(dt$initBalance[Account == "Cash"], cash, "Account")
-  check.duplicates(cash, verbose = verbose)
-  dt$all <- add.data(dt$all, cash, name = "dt$all", verbose = T)
-  return(dt)
-}
-
-get.data.unicredit <- function(dt, folder, verbose = F) {
-  # Get Unicredit transactions
-  #
-  # Scan through all files in folder containing "Unicredit"
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $rules: renaming rules
-  #     $income: income categories
-  #     $balance: balance categories
-  #     $year: year to check
-  #     $fx: FX rates
-  #   file: path to file
-  #   verbose: print additional information
-  #
-  # Returns:
-  #   dt: list of data.tables
-  uniAll <- data.table()
-  for (fn in list.files(path = folder)) {
-    if (grepl("unicredit", tolower(fn), fixed = TRUE)) {
-      path <- paste0(folder, fn)
-      dtUni <- read.data(path, skip = 3, verbose = verbose)
-      dtUni <- rename.data(dtUni, dt$rules, "Unicredit")
-      dtUni[, Details := paste0(Partner, " | ", PartnerAccount, " | ",
-                                Transaction)]
-      dtUni[, Amount := sapply(Amount, function(x) 
-        as.numeric(mgsub(c(",", "\u00A0", " HUF"), c(".", "", ""), x))
-      )]
-      dtUni$Currency <- "HUF"
-      dtUni <- finalize.data(dt, dtUni)
-      uniAll <- add.data(uniAll, dtUni, name = "unicredit", verbose = verbose)
-    }
+  if (type == "Cash") {
+    dt[, Amount := as.numeric(sub(",", ".", Amount, fixed = TRUE))]
+  } else if (type == "Unicredit") {
+    dt[, Details := paste0(Partner, " | ", PartnerAccount, " | ",  Transaction)]
+    dt[, Amount := sapply(Amount, function(x) 
+      as.numeric(mgsub(c(",", "\u00A0", " HUF"), c(".", "", ""), x))
+    )]
+  } else if (type == "Egeszsegpenztar") {
+    dt[, Details := paste0(Partner, " | ", Type)]
+    dtTransfer = dt[Credit != 0]
+    dtTransfer[, c("Details", "Credit") := list('Bank fee', CreditFinal-Credit)]
+    dt <- add.data(dt, dtTransfer)
+    dt[, Amount := Credit + Debit]
   }
-  check.duplicates(uniAll, verbose = verbose)
-  dt$all <- add.data(dt$all, uniAll, name = "dt$all", verbose = verbose)
   return(dt)
 }
 
-get.data.notes <- function(dt, file, verbose = F) {
+get.data <- function(dt, file, type = "normal", verbose = F) {
+  # Get data from file
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $: FX rates
+  #   file: path to file
+  #   type: file type
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: list of data.tables
+  reportType <- dt$reportTypes[Type == type]
+  if (verbose) cat(paste0("Get data from: ", dt$folderReports, file,
+                          " (type: ", type, ")\n"))
+  d <- read.data(file, folder = dt$folderReports, skip = reportType$Skip,
+                 verbose = verbose)
+  d <- rename.data(d, dt$rules, type)
+  d <- get.columns(d, type)
+  if ("" != reportType$Currency) d$Currency <- reportType$Currency
+  if ("" != reportType$Account) d$Account <- reportType$Account
+  d <- finalize.data(dt, d)
+  check.duplicates(d, threshold = reportType$Duplicates, verbose = verbose)
+  dt$all <- add.data(dt$all, d, name = "dt$all", verbose = T)
+  return(dt)
+}
+
+get.notes <- function(dt, file, verbose = F) {
   # Get data from cash inventory
   #
   # Args:
   #   dt: list of data.tables
   #     $fx: FX rates
+  #     $folderInput: input folder
   #   file: path to file
   #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
-  cash <- read.data(file)
+  cash <- read.data(file, folder = dt$folderInput)
   cash[, AmountHUF := Notional * Amount * dt$fx[Currency]]
   cash[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
   if (nrow(cash[is.na(AmountHUF), ]) > 0) {

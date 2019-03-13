@@ -10,3 +10,9 @@ Unicredit;Column;Számlaszám;Account
 Unicredit;Account;10918001-00000023-19880007;Unicredit.Checking
 Unicredit;Account;10918001-00000023-19880021;Unicredit.Savings1
 Unicredit;Account;10918001-00000023-19880045;Unicredit.Savings2
+Egeszsegpenztar;Column;Értéknap;Date
+Egeszsegpenztar;Column;Partner név;Partner
+Egeszsegpenztar;Column;Jóváírás;Credit
+Egeszsegpenztar;Column;Fedezetre jóváírás;CreditFinal
+Egeszsegpenztar;Column;Terhelés;Debit
+Egeszsegpenztar;Column;Jogcím;Type

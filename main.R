@@ -6,46 +6,62 @@
 # Year: 2019
 # Licence: MIT
 
-# TODO: check whether sum of transfer is 0
-# TODO: create mapping between account name and account number for Unicredit
-# TODO: automatically read all Unicredit exports
-
 source("read.R")
 
 # Inputs
-fileIncomeCat <- "input/income_categories.csv"
-fileInitialBalance <- "input/initial_balance.csv"
-fileYearBalance <- paste0("input/balance_", year, ".csv")
-filePatterns <- "input/patterns.csv"
-fileRenameRules <- "input/rename_rules.csv"
-fileFXRates <- "input/fx_rates.csv"
-fileTargets <- "input/target_categories.csv"
-fileNotes <- "input/cash_inventory.csv"
-fileManual <- "input/manual.csv"
+year <- 2019
+verbose <- T
 
+folderInput <- "input/"
 folderReports <- "reports/"
-fileCash <- paste0("reports/cash_", year, ".csv")
-fileTransactionMissing <- paste0("output/transactions_missing.csv")
+folderOutput <- "output/"
 
-# Read data
-dt <- list("year" = 2019)
-dt$rules <- read.data(fileRenameRules)
-dt$income <- read.data(fileIncomeCat)
-dt$patterns <- read.data(filePatterns)
+fileIncomeCat <- "income_categories.csv"
+fileInitialBalance <- "initial_balance.csv"
+fileYearBalance <- paste0("balance_", year, ".csv")
+filePatterns <- "patterns.csv"
+fileRenameRules <- "rename_rules.csv"
+fileFXRates <- "fx_rates.csv"
+fileTargets <- "target_categories.csv"
+fileNotes <- "cash_inventory.csv"
+fileReportTypes <- "report_types.csv"
 
+fileTransactionMissing <- "transactions_missing.csv"
+fileTransactionAll <- paste0("transactions_", year, ".xlsx")
+
+# read input data
+dt <- list("year" = year)
+dt$folderInput <- folderInput
+dt$folderReports <- folderReports
+dt$rules <- read.data(fileRenameRules, folder = folderInput)
+dt$income <- read.data(fileIncomeCat, folder = folderInput)
+dt$patterns <- read.data(filePatterns, folder = folderInput)
+dt$reportTypes <- read.data(fileReportTypes, folder = folderInput)
+
+dt <- get.fx(dt, fileFXRates, verbose = F)
+dt <- get.targets(dt, fileTargets, verbose = F)
+dt <- get.balance(dt, fileInitialBalance, fileYearBalance, verbose = F)
+dt <- get.notes(dt, fileNotes, verbose = T)
+
+# read reports
 dt$all <- data.table()
-dt <- get.data.fx(dt, fileFXRates, verbose = F)
-dt <- get.data.targets(dt, fileTargets, verbose = F)
-dt <- get.data.balance(dt, fileInitialBalance, fileYearBalance, verbose = T)
-dt <- get.data.manual(dt, fileManual, verbose = T)
-dt <- get.data.cash(dt, fileCash, verbose = T)
-dt <- get.data.unicredit(dt, folderReports, verbose = T)
-dt <- get.data.notes(dt, fileNotes, verbose = T)
+for (fn in list.files(path = folderReports)) {
+  print(fn)
+  type <- get.report.type(dt, fn, verbose = verbose)
+  if (!is.null(type)) {
+    dt <- get.data(dt, fn, type, verbose = verbose)
+  }
+}
 
-export.data(setorder(dt$all, Date), fileTransactionAll, verbose = T)
+# export results
+setorder(dt$all, Date)
+setcolorder(dt$all, c(colnames(dt$all)[-2], colnames(dt$all)[2]))
+write_xlsx(dt$all, path = paste0(folderOutput, fileTransactionAll))
 dtMissing <- setorder(dt$all, Category)[is.na(Category)]
-export.data(dtMissing, fileTransactionMissing, deleteIfEmpty = T, verbose = T)
+export.data(dtMissing, fileTransactionMissing, deleteIfEmpty = T,
+            folder = folderOutput, verbose = T)
 
+# check data
 check.data(dt, showAll = F, verbose = T)
 
 # browser()

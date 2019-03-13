@@ -10,6 +10,7 @@ Bank fee;Bankon bel.átut.jut-SpNet;
 Bank fee;Csoportos terhelés díja;
 Bank fee;Bankon bel.áll.megbíz.díj;
 Bank fee;NA | NA | CRT - FTD;
+Bank fee;Bank fee;
 CLT-New;C&A;
 CLT-New;H&M;
 CLT-New;DDA DISZKONT;
@@ -41,6 +42,7 @@ Fundamenta;Fundamenta-Lakáskassza;
 Generali;GENERALI;
 HLT-Insurance;8430874429;
 HLT-Pharmacy;FAGYO:NGY PATIKA;
+HLT-Pharmacy;Patika;
 HLT-Sport;HU-Budaors Tizproba Magyarorszag;
 Interest;Brutto Interest;
 OFF-Legal fees;KORMA'NYABLAK;
@@ -62,6 +64,7 @@ REL-Gifts;Budapest Csarnok ter 5.;
 SHP-Other;ADMIN.WEBONIC.HU;
 SHP-Other;HUN-BUDAPEST K.KERT 2000 KFT.;Kert
 SHP-Toiletries;DM 020;
+SHP-Toiletries;drogerie markt Kft.;
 SHP-Toiletries;WWW.BARION.COM/GUEST;Babapárna
 SHP-Toiletries;HORVÁTH EMIL;Babapárna
 Transfer;Szabó Viktor | 11773054-00576712-00000000 | ;
@@ -71,6 +74,7 @@ Transfer;SZABÓ VIKTOR | 10918001-00000023-19880045 | ;
 Transfer;SZABÓ VIKTOR | 10918001-00000023-19880021 | ;
 Transfer;Projektek;
 Transfer;OTP EGÉSZSÉGPÉNZTÁR;
+Transfer;OTP Egészségpénztár;
 Withdrawal;HU-BUDAPEST 89000695 | NA | ATM kifizetés;
 Withdrawal;HU-Budapest Szabadsag ter | NA | ATM kifizetés(;
 Transfer;Megtakarítás;
