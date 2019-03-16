@@ -35,31 +35,35 @@ rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
   return(d)
 }
 
-read.data <- function(fn, folder = "", dec = ".", encoding = "UTF-8", skip = 0,
-  verbose = F) {
+read.data <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
+                      sep = "auto", skip = 0, na = NULL, verbose = F) {
   # Read data from file
   #
   # Args:
   #   fn: path to file
   #   dec: decimal places
   #   encoding: file encoding
+  #   sep: separator between columns
   #   skip: number of lines to skip
+  #   na: replacement for NA strings
   #   verbose: print additional information
   #
   # Returns:
   #   d: data.table
   if (is.na(skip)) skip <- 0
+  if (sep == "") sep <- "auto"
   if (folder != "") fn <- paste0(folder, fn)
   if (file.exists(fn)) {
     fileType <- unlist(strsplit(fn, "[.]"))[2]
     if (fileType == "csv") {
-      d <- fread(fn, dec = dec, encoding = encoding)
+      d <- fread(fn, dec = dec, encoding = encoding, sep = sep)
     } else if (fileType %in% c("xlsx", "xls")) {
       d <- as.data.table(read_excel(fn, skip = skip))
     } else {
       cat("Unknown filetype:", fileType, "in", fn, "\n")
       stop()
     }
+    if (!is.null(na)) d[is.na(d)] <- na
     if (verbose) cat(dim(dt)[[1]], "rows imported from:", fn, "\n")
     return(d)
   } else {
@@ -165,7 +169,8 @@ finalize.data <- function(dt, d) {
   d <- d[, .(Account, Details, Date, Amount, Category, Currency)]
   d <- d[substr(Date, 1, 4) == dt$year, ]
   d[, Date := sapply(Date, function(x) gsub("-", ".", substr(x, 1, 10)))]
-  d[, Month := sapply(Date, function(x) strtoi(substr(x, 6, 7)))]
+  d[, Month := sapply(Date, function(x) as.integer(substr(x, 6, 7)))]
+  d[, Day := sapply(Date, function(x) as.integer(substr(x, 9, 10)))]
   d[, AmountHUF := Amount * dt$fx[Currency]]
   d[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
   d <- add.category(d, dt$patterns, verbose = F)
@@ -331,7 +336,7 @@ get.balance <- function(dt, fileInit, fileYear, verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  dt$yearBalance <- read.data(fileYear, folder = dt$folderInput)
+  dt$yearBalance <- read.data(fileYear, folder = dt$folderInput, na = 0)
   dt$initBalance <- read.data(fileInit, folder = dt$folderInput)
   dt$initBalance[, InitialHUF := HUF + USD * dt$fx["USD"] + EUR * dt$fx["EUR"]]
   dt$initBalance[, InitialUSD := round(InitialHUF / dt$fx["USD"], 2)]
@@ -361,12 +366,13 @@ get.manual <- function(dt, file, verbose = F) {
   return(dt)
 }
 
-get.columns <- function(dt, type = "normal") {
+get.columns <- function(dt, type = "normal", negate = FALSE) {
   # Get columns for different report types
   #
   # Args:
   #   dt: data.table
   #   type: file type
+  #   negate: negate values
   #
   # Returns:
   #   dt: list of data.tables
@@ -383,6 +389,13 @@ get.columns <- function(dt, type = "normal") {
     dtTransfer[, c("Details", "Credit") := list('Bank fee', CreditFinal-Credit)]
     dt <- add.data(dt, dtTransfer)
     dt[, Amount := Credit + Debit]
+  } else if (type == "53_checking") {
+    names(dt) <- "Details"
+    dt[, Date := paste0(2019, ".", gsub("/", ".", substr(Details, 1, 5)))]
+    dt[, Amount := sapply(Details, function(x) {
+      as.numeric(strsplit(x, " ")[[1]][2])
+      })]
+    if (negate) dt$Amount <- dt$Amount * -1
   }
   return(dt)
 }
@@ -400,12 +413,13 @@ get.data <- function(dt, file, type = "normal", verbose = F) {
   # Returns:
   #   dt: list of data.tables
   reportType <- dt$reportTypes[Type == type]
+  negate <- grepl("debit", tolower(file))
   if (verbose) cat(paste0("Get data from: ", dt$folderReports, file,
                           " (type: ", type, ")\n"))
   d <- read.data(file, folder = dt$folderReports, skip = reportType$Skip,
-                 verbose = verbose)
+                 sep = reportType$Separator, verbose = verbose)
   d <- rename.data(d, dt$rules, type)
-  d <- get.columns(d, type)
+  d <- get.columns(d, type, negate)
   if ("" != reportType$Currency) d$Currency <- reportType$Currency
   if ("" != reportType$Account) d$Account <- reportType$Account
   d <- finalize.data(dt, d)
@@ -489,7 +503,8 @@ find.pairs <- function(dt, days = 7, verbose = F) {
   return(dt[, RowID := NULL])
 }
 
-check.category <- function(dt, catName, showAll = F, verbose = F) {
+check.category <- function(dt, catName, showAll = F, strictMode = T,
+                           verbose = F) {
   # Check if transactions for given category match target
   #
   # Args:
@@ -499,6 +514,7 @@ check.category <- function(dt, catName, showAll = F, verbose = F) {
   #   catName: category name
   #   showAll: if TRUE, shows all transactions if no match. if FALSE, shows only
   #     those transactions where that have no opposite transaction
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
   dtCat <- dt$all[Category == catName, ]
   dtCat <- find.pairs(dtCat, verbose = F)
@@ -512,15 +528,15 @@ check.category <- function(dt, catName, showAll = F, verbose = F) {
     cat(paste0("WARNING: '", catName, "' transactions don't match ",
                "with target ", targetHUF, " HUF!\n",
                "HINT: to dismiss error set target to ",
-               as.numeric(catSumHUF), " HUF"))
-    stop()
+               as.numeric(catSumHUF), " HUF\n"))
+    if (strictMode) stop()
   } else if (verbose) {
     cat(paste0("PASS: '", catName, "' transactions match ",
                "with target ", targetHUF, " HUF\n"))
   }
 }
 
-check.notes <- function(dt, verbose = F) {
+check.notes <- function(dt, strictMode = T, verbose = F) {
   # Check if notes match with cash transactions
   #
   # Compare total value of coins and notes with initial cash balance and
@@ -530,7 +546,7 @@ check.notes <- function(dt, verbose = F) {
   # Args:
   #   dt: list of data.tables
   #     $fx: FX rates
-  #   file: path to file
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
   #
   # Returns:
@@ -552,12 +568,12 @@ check.notes <- function(dt, verbose = F) {
         "G. DIFFERENCE (F-C):\tHUF ", diffHUF, "\n",
         "HINT: to dismiss error change initial cash adjustment to HUF",
         dt$adjustmentHUF + diffHUF,"(E+G)\n")
-    stop()
+    if (strictMode) stop()
   } else if (verbose) cat("PASS: Notes and cash transations match (adjustment:",
                           dt$adjustmentHUF, "HUF)\n")
 }
 
-check.balance <- function(dt, verbose = F) {
+check.balance <- function(dt, strictMode = T, verbose = F) {
   # Check if transactions match with balances
   #
   # Compare total value of coins and notes with initial cash balance and
@@ -567,52 +583,64 @@ check.balance <- function(dt, verbose = F) {
   # Args:
   #   dt: list of data.tables
   #     $fx: FX rates
-  #   file: path to file
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  balance <- dt$yearBalance
-  if (nrow(balance) > 0) {
-    for (row in 1:nrow(balance)) {
-      account <- balance[row, Account]
-      month <- balance[row, Month]
-      adjustVal <- balance[row, Adjustment]
-      balanceVal <- balance[row, Balance]
-      balanceHUF <- (balanceVal + adjustVal) * dt$fx[balance[row, Currency]]
-      initialHUF <- dt$initBalance[Account == account, InitialHUF]
-      amountHUF <- sum(dt$all[Account == account & Month <= month, AmountHUF])
-      currentHUF <- initialHUF + amountHUF
-      diffHUF <- currentHUF - balanceHUF
-      adjustValNew <- (currentHUF - balanceHUF) / 
-        dt$fx[balance[row, Currency]] + adjustVal
-      if (abs(diffHUF) > 0.01) {
+  dtBal <- dt$yearBalance
+  if (nrow(dtBal) > 0) {
+    for (row in 1:nrow(dtBal)) {
+      account <- dtBal[row, Account]
+      month <- dtBal[row, Month]
+      ccy <- dtBal[row, Currency]
+      day <- ifelse(dtBal[row, Day] != 0, dtBal[row, Day], 31)
+      finalDate <- ifelse(day == 31, paste0("month ", month),
+                          paste0(month, "/", day))
+      fx <- dt$fx[ccy]
+      adjustOld <- sum(dtBal[Account == account & Month < month, Adjustment])
+      adjustNew <- sum(dtBal[row, Adjustment])
+      adjustVal <- adjustOld + adjustNew
+      balance <- dtBal[row, Balance] + adjustVal
+      initial <- round(dt$initBalance[Account == account, InitialHUF] / fx, 2)
+      trans <- round(sum(dt$all[Account == account & (Month < month
+                                | (Month == month & Day <= day)), AmountHUF])
+                     / fx, 2)
+      current <- initial + trans
+      diff <- current - balance
+      adjustValNew <- adjustNew + diff
+      if (abs(diff) > 0.01) {
+        browser()
+        View(dt$all[Account == account])
         cat(paste0("WARNING: ", account, " transactions don't match with ",
-                   "balance for month ", month, "!\n",
-                   "A. Initial:\t\tHUF ", initialHUF, "\n",
-                   "B. Transactions:\tHUF ", amountHUF, "\n",
-                   "C. Current (A+B):\tHUF ", currentHUF, "\n",
-                   "D. Balance:\t\tHUF ", balanceHUF, "\n",
-                   "E. Difference (D-C):\tHUF ", currentHUF - balanceHUF, "\n",
-                   "HINT: to dismiss error adjust monthly balance with ",
-                   adjustValNew, "\n"))
-        stop()
+                   "balance for ", finalDate, "!\n",
+                   "A. Initial:\t\t", ccy, " ", initial, "\n",
+                   "B. Transactions:\t", ccy, " ", trans, "\n",
+                   "C. Current (A+B):\t", ccy, " ", current, "\n",
+                   "D. Balance:\t\t", ccy, " ", balance, "\n",
+                   "E. Difference (D-C):\t", ccy, " ", current - balance, "\n",
+                   "HINT: to dismiss error set adjustment for month ", month,
+                   " to ", ccy, " ", adjustValNew, "\n"))
+        if (strictMode) stop()
       } else if (verbose) {
         cat(paste0("PASS: ", account, " transactions match with ",
-                   "balance for month ", month, " (adjustment: HUF ",
+                   "balance for month ", month, " (adjustment: ", ccy, " ",
                    adjustVal, ")\n"))
       }
     }
   }
 }
 
-check.data <- function(dt, showAll = F, verbose = F) {
+check.data <- function(dt, showAll = F, strictMode = T, verbose = F) {
   # Get cash transactions
   #
   # Args:
   #   dt: list of data.tables
   #   file: path to file
   #   showAll: if TRUE, shows all transactions in check.category()
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  check.notes(dt, verbose = verbose)
-  check.balance(dt, verbose = verbose)
-  check.category(dt, catName = "Withdrawal", verbose = verbose)
-  check.category(dt, catName = "Transfer", showAll = showAll, verbose = verbose)
+  check.notes(dt, strictMode = strictMode, verbose = verbose)
+  check.balance(dt, strictMode = strictMode, verbose = verbose)
+  check.category(dt, catName = "Withdrawal", strictMode = strictMode,
+                 verbose = verbose)
+  check.category(dt, catName = "Transfer", showAll = showAll,
+                 strictMode = strictMode, verbose = verbose)
 }

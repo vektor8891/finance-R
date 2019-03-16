@@ -6,6 +6,11 @@
 # Year: 2019
 # Licence: MIT
 
+# TODO: add day option to check balances
+# read 53 Checking reports
+# add stritMode option to checks
+# accumulate adjustments to monthly balance checks
+
 source("read.R")
 
 # Inputs
@@ -46,7 +51,6 @@ dt <- get.notes(dt, fileNotes, verbose = T)
 # read reports
 dt$all <- data.table()
 for (fn in list.files(path = folderReports)) {
-  print(fn)
   type <- get.report.type(dt, fn, verbose = verbose)
   if (!is.null(type)) {
     dt <- get.data(dt, fn, type, verbose = verbose)
@@ -62,7 +66,7 @@ export.data(dtMissing, fileTransactionMissing, deleteIfEmpty = T,
             folder = folderOutput, verbose = T)
 
 # check data
-check.data(dt, showAll = F, verbose = T)
+check.data(dt, showAll = F, strictMode = F, verbose = T)
 
 # browser()
 
