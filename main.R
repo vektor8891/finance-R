@@ -6,16 +6,11 @@
 # Year: 2019
 # Licence: MIT
 
-# TODO: add day option to check balances
-# read 53 Checking reports
-# add stritMode option to checks
-# accumulate adjustments to monthly balance checks
-
 source("read.R")
 
 # Inputs
 year <- 2019
-verbose <- T
+verbose <- F
 
 folderInput <- "input/"
 folderReports <- "reports/"
@@ -31,8 +26,8 @@ fileTargets <- "target_categories.csv"
 fileNotes <- "cash_inventory.csv"
 fileReportTypes <- "report_types.csv"
 
-fileTransactionMissing <- "transactions_missing.csv"
-fileTransactionAll <- paste0("transactions_", year, ".xlsx")
+fileMissing <- "transactions_missing.csv"
+fileFinal <- "FINAL_REPORT"
 
 # read input data
 dt <- list("year" = year)
@@ -53,36 +48,15 @@ dt$all <- data.table()
 for (fn in list.files(path = folderReports)) {
   type <- get.report.type(dt, fn, verbose = verbose)
   if (!is.null(type)) {
+    print(fn)
     dt <- get.data(dt, fn, type, verbose = verbose)
   }
 }
 
-# export results
-setorder(dt$all, Date)
-setcolorder(dt$all, c(colnames(dt$all)[-2], colnames(dt$all)[2]))
-write_xlsx(dt$all, path = paste0(folderOutput, fileTransactionAll))
-dtMissing <- setorder(dt$all, Category)[is.na(Category)]
-export.data(dtMissing, fileTransactionMissing, deleteIfEmpty = T,
-            folder = folderOutput, verbose = T)
-
 # check data
 check.data(dt, showAll = F, strictMode = F, verbose = T)
 
-# browser()
-
-# # # Summarize data
-# dt$fileCatPivotHUF <- "output/pivot_category_huf.csv"
-# dt$fileCatPivotUSD <- "output/pivot_category_usd.csv"
-# dt$fileAccPivotHUF <- "output/pivot_account_huf.csv"
-# dt$fileAccPivotUSD <- "output/pivot_account_usd.csv"
-# pivCatHUF <- dcast(dataBC, Category ~ Month, value.var = "AmountHUF", fun = sum)
-# pivCatUSD <- dcast(dataBC, Category ~ Month, value.var = "AmountUSD", fun = sum)
-# pivAccHUF <- dcast(dataBC, Account ~ Month, value.var = "AmountHUF", fun = sum)
-# pivAccUSD <- dcast(dataBC, Account ~ Month, value.var = "AmountUSD", fun = sum)
-# 
-# # Export results
-# write.csv(pivCatHUF, fileCatPivotHUF, fileEncoding = "UTF-8", row.names = FALSE)
-# write.csv(pivCatUSD, fileCatPivotUSD, fileEncoding = "UTF-8", row.names = FALSE)
-# write.csv(pivAccHUF, fileAccPivotHUF, fileEncoding = "UTF-8", row.names = FALSE)
-# write.csv(pivAccUSD, fileAccPivotUSD, fileEncoding = "UTF-8", row.names = FALSE)
-
+# export results
+export.missing(dt$all, folderOutput, fileMissing)
+export.results(dt, folderOutput, fileFinal, currency = "HUF")
+export.results(dt, folderOutput, fileFinal, currency = "USD")

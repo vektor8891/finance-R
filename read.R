@@ -1,7 +1,5 @@
 library(data.table)
-library(readxl)
-library(writexl)
-library(qdap)
+library(qdap) # mgsub
 
 rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
   # Rename values in data.table
@@ -36,7 +34,7 @@ rename.data <- function(d, rulesAll, type, column = F, verbose = F) {
 }
 
 read.data <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
-                      sep = "auto", skip = 0, na = NULL, verbose = F) {
+                      sep = "auto", skip = 1, na = NULL, verbose = F) {
   # Read data from file
   #
   # Args:
@@ -50,6 +48,7 @@ read.data <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
   #
   # Returns:
   #   d: data.table
+  library(xlsx)
   if (is.na(skip)) skip <- 0
   if (sep == "") sep <- "auto"
   if (folder != "") fn <- paste0(folder, fn)
@@ -58,7 +57,8 @@ read.data <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
     if (fileType == "csv") {
       d <- fread(fn, dec = dec, encoding = encoding, sep = sep)
     } else if (fileType %in% c("xlsx", "xls")) {
-      d <- as.data.table(read_excel(fn, skip = skip))
+      d <- as.data.table(read.xlsx(fn, 1, encoding = encoding,
+                                   startRow = skip + 1))
     } else {
       cat("Unknown filetype:", fileType, "in", fn, "\n")
       stop()
@@ -72,8 +72,7 @@ read.data <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
   }
 }
 
-export.data <- function(dt, fn, encoding = "UTF-8", deleteIfEmpty = F,
-                        folder = "", verbose = F) {
+export.data <- function(dt, fn, encoding = "UTF-8", folder = "", verbose = F) {
   # Export data to file
   #
   # Args:
@@ -95,13 +94,57 @@ export.data <- function(dt, fn, encoding = "UTF-8", deleteIfEmpty = F,
       stop()
     }
     if (verbose) cat(dim(dt)[[1]], "rows exported to:", fn, "\n")
-  } else {
-    if (verbose) cat("Data table empty - nothing exported to:", fn, "\n")
-    if (deleteIfEmpty & file.exists(fn)) {
+  }
+}
+
+export.missing <- function(dt, folder, fileMissing, verbose = F) {
+  # Export missing data to file
+  #
+  # Args:
+  #   dt: list of transactions
+  #   folder: export folder name
+  #   fileMissing: missing file name
+  fn <- paste0(folder, fileMissing)
+  dtMissing <- setorder(dt, Category)[is.na(Category)]
+  if (nrow(dtMissing) == 0) {
+    if (verbose) cat("NO MISSING CATEGORY FOUND! :)\n")
+    if (file.exists(fn)) {
       file.remove(fn)
       if (verbose) cat("File deleted:", fn, "\n")
     }
+  } else {
+    export.data(dtMissing, fileMissing, folder = folder, verbose = verbose)
   }
+}
+
+export.results <- function(dt, folder, file, currency) {
+  # Export pivot tables & transactions to file
+  #
+  # Args:
+  #   dt: list of data.table
+  #     $all: transactions
+  #     $income: categories
+  #   folder: export folder name
+  #   file: report file name
+  #   currency: report currency (HUF/USD)
+  time <- mgsub(c(" ",":"), c("_","."), as.POSIXlt(Sys.time()))
+  fn <- paste0(folder, file, "_", year,"_", currency, "_", time, ".xlsx")
+  
+  setorder(dt$all, Date)
+  setcolorder(dt$all, c(colnames(dt$all)[-2], colnames(dt$all)[2]))
+  write.xlsx(dt$all, fn, "Transactions", row.names = F)
+  
+  amount <- paste0("Amount", currency)
+  dt <- merge(dt$all, dt$income, by = "Category")
+  cat <- dcast(dt, Category ~ Month, value.var = amount, fun = sum)
+  acc <- dcast(dt, Account ~ Month, value.var = amount, fun = sum)
+
+  cols <- colnames(cat)[-1]
+  cat <- cat[, (cols) := round(.SD), .SDcols = cols]
+  acc <- acc[, (cols) := round(.SD), .SDcols = cols]
+  
+  write.xlsx(acc, fn, "Balance", append = T, row.names = F)
+  write.xlsx(cat, fn, "Income", append = T, row.names = F)
 }
 
 add.data <- function(dtAll, dtNew, name = "data.table", verbose = F) {
@@ -164,7 +207,6 @@ finalize.data <- function(dt, d) {
   #
   # Returns:
   #   dt: data.table
-  # browser()
   if (!hasName(d, "Category")) d[, Category := character()]
   d <- d[, .(Account, Details, Date, Amount, Category, Currency)]
   d <- d[substr(Date, 1, 4) == dt$year, ]
@@ -249,6 +291,22 @@ add.category <- function(dt, patternData, verbose = F) {
   }
   dt <- dt[,.(Category = unlist(Category)), by = setdiff(names(dt), 'Category')]
   return(dt)
+}
+
+add.adjustment <- function(dt, adjustmentData) {
+  # Add adjustment to transactions
+  #
+  # Args:
+  #   dt: data.table for transactions
+  #   adjustmentData: data.table containing adjustment 
+  #
+  # Returns:
+  #   dt: list of data.table with updated transactions
+  adjustmentData$Year <- dt$year
+  adjust <- get.columns(adjustmentData, type = "adjust")
+  adjust <- finalize.data(dt, adjust)
+  dt$all <- add.data(dt$all, adjust, "adjust")
+  return(dt$all)
 }
 
 get.category.pattern <- function(detail, patternData, verbose = F) {
@@ -376,17 +434,18 @@ get.columns <- function(dt, type = "normal", negate = FALSE) {
   #
   # Returns:
   #   dt: list of data.tables
-  if (type == "Cash") {
+  if (type == "cash") {
     dt[, Amount := as.numeric(sub(",", ".", Amount, fixed = TRUE))]
-  } else if (type == "Unicredit") {
+  } else if (type == "unicredit") {
     dt[, Details := paste0(Partner, " | ", PartnerAccount, " | ",  Transaction)]
     dt[, Amount := sapply(Amount, function(x) 
       as.numeric(mgsub(c(",", "\u00A0", " HUF"), c(".", "", ""), x))
     )]
-  } else if (type == "Egeszsegpenztar") {
+  } else if (type == "egeszsegpenztar") {
     dt[, Details := paste0(Partner, " | ", Type)]
     dtTransfer = dt[Credit != 0]
-    dtTransfer[, c("Details", "Credit") := list('Bank fee', CreditFinal-Credit)]
+    dtTransfer[, Details := 'Bank fee']
+    dtTransfer[, Credit := CreditFinal - Credit]
     dt <- add.data(dt, dtTransfer)
     dt[, Amount := Credit + Debit]
   } else if (type == "53_checking") {
@@ -396,6 +455,18 @@ get.columns <- function(dt, type = "normal", negate = FALSE) {
       as.numeric(strsplit(x, " ")[[1]][2])
       })]
     if (negate) dt$Amount <- dt$Amount * -1
+  } else if (type == "capital_one") {
+    dt[is.na(dt)] <- 0
+    dt[, Amount := Credit - Debit]
+    dt[, Date := sapply(Date, function(x) {
+      format(as.POSIXct(x, format = "%m/%d/%Y"), format = "%Y.%m.%d")
+      })]
+    dt[, Category := NULL]
+  } else if (type == "adjust") {
+    dt[, Amount := Adjustment]
+    dt[, Details := "Adjustment"]
+    dt[, Day := ifelse(Day == 0, 1, Day)]
+    dt$Date <- sprintf("%4d.%02d.%02d", dt$Year, dt$Month, dt$Day)
   }
   return(dt)
 }
@@ -412,19 +483,19 @@ get.data <- function(dt, file, type = "normal", verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  reportType <- dt$reportTypes[Type == type]
+  report <- dt$reportTypes[Type == type]
   negate <- grepl("debit", tolower(file))
   if (verbose) cat(paste0("Get data from: ", dt$folderReports, file,
                           " (type: ", type, ")\n"))
-  d <- read.data(file, folder = dt$folderReports, skip = reportType$Skip,
-                 sep = reportType$Separator, verbose = verbose)
+  d <- read.data(file, folder = dt$folderReports, skip = report$Skip,
+                 sep = report$Separator, verbose = verbose)
   d <- rename.data(d, dt$rules, type)
   d <- get.columns(d, type, negate)
-  if ("" != reportType$Currency) d$Currency <- reportType$Currency
-  if ("" != reportType$Account) d$Account <- reportType$Account
+  if ("" != report$Currency) d$Currency <- report$Currency
+  if ("" != report$Account) d$Account <- report$Account
   d <- finalize.data(dt, d)
-  check.duplicates(d, threshold = reportType$Duplicates, verbose = verbose)
-  dt$all <- add.data(dt$all, d, name = "dt$all", verbose = T)
+  check.duplicates(d, threshold = report$Duplicates, verbose = verbose)
+  dt$all <- add.data(dt$all, d, name = "dt$all", verbose = verbose)
   return(dt)
 }
 
@@ -586,6 +657,7 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
   dtBal <- dt$yearBalance
+  dt$all <- add.adjustment(dt, dtBal[Adjustment != 0])
   if (nrow(dtBal) > 0) {
     for (row in 1:nrow(dtBal)) {
       account <- dtBal[row, Account]
@@ -595,34 +667,30 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
       finalDate <- ifelse(day == 31, paste0("month ", month),
                           paste0(month, "/", day))
       fx <- dt$fx[ccy]
-      adjustOld <- sum(dtBal[Account == account & Month < month, Adjustment])
-      adjustNew <- sum(dtBal[row, Adjustment])
-      adjustVal <- adjustOld + adjustNew
-      balance <- dtBal[row, Balance] + adjustVal
+      adjust <- dtBal[row, Adjustment]
+      balance <- dtBal[row, Balance]
       initial <- round(dt$initBalance[Account == account, InitialHUF] / fx, 2)
       trans <- round(sum(dt$all[Account == account & (Month < month
                                 | (Month == month & Day <= day)), AmountHUF])
                      / fx, 2)
-      current <- initial + trans
-      diff <- current - balance
-      adjustValNew <- adjustNew + diff
+      total <- initial + trans
+      diff <- total - balance
+      adjustNew <- round(adjust - diff, 2)
       if (abs(diff) > 0.01) {
-        browser()
-        View(dt$all[Account == account])
         cat(paste0("WARNING: ", account, " transactions don't match with ",
                    "balance for ", finalDate, "!\n",
                    "A. Initial:\t\t", ccy, " ", initial, "\n",
                    "B. Transactions:\t", ccy, " ", trans, "\n",
-                   "C. Current (A+B):\t", ccy, " ", current, "\n",
+                   "C. Current (A+B):\t", ccy, " ", total, "\n",
                    "D. Balance:\t\t", ccy, " ", balance, "\n",
-                   "E. Difference (D-C):\t", ccy, " ", current - balance, "\n",
+                   "E. Difference (D-C):\t", ccy, " ", total - balance, "\n",
                    "HINT: to dismiss error set adjustment for month ", month,
-                   " to ", ccy, " ", adjustValNew, "\n"))
+                   " to ", ccy, " ", adjustNew, "\n"))
         if (strictMode) stop()
       } else if (verbose) {
         cat(paste0("PASS: ", account, " transactions match with ",
                    "balance for month ", month, " (adjustment: ", ccy, " ",
-                   adjustVal, ")\n"))
+                   adjust, ")\n"))
       }
     }
   }

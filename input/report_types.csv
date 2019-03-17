@@ -1,6 +1,7 @@
 Type,Currency,Duplicates,Skip,Account,Separator
-Unicredit,HUF,,3,,
-Cash,,,,,
-Manual,,1,,,
-Egeszsegpenztar,HUF,2,,Egeszsegpenztar,
+unicredit,HUF,,3,,
+cash,,,,,
+manual,,1,,,
+egeszsegpenztar,HUF,2,,Egeszsegpenztar,
 53_checking,USD,,,53.Checking,";"
+capital_one,USD,,,Capital.One,

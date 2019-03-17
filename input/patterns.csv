@@ -1,4 +1,5 @@
 Category;Pattern;Note
+Adjustment;Adjustment;
 Bank fee;Cr Forgalmi kedvezmény;
 Bank fee;Költség ATM kifizetés;
 Bank fee;Számlainformációs SMS díj;
@@ -9,9 +10,10 @@ Bank fee;eBanking havi szolgáltatási díj;
 Bank fee;Bankon bel.átut.jut-SpNet;
 Bank fee;Csoportos terhelés díja;
 Bank fee;Bankon bel.áll.megbíz.díj;
-Bank fee;NA | NA | CRT - FTD;
+Bank fee; |  | CRT - FTD;
 Bank fee;Bank fee;
 CLT-New;C&A;
+CLT-New;CORVIN HOUSE;
 CLT-New;H&M;
 CLT-New;DDA DISZKONT;
 COM-Internet;DIJNET/MOBILFIZET?S 5.330,00 HUF;
@@ -32,6 +34,7 @@ Donation sent;Lakatos Róbert;
 EDU-Books;Kindle;
 EDU-Zsebtanar;GSUITE_zse;
 FOOD-Groceries;ALDI;
+FOOD-Groceries;GYMBEAM.HU;
 FOOD-Groceries;Ázsia Bolt;
 FOOD-Groceries;CBA PRI'MA;
 FOOD-Groceries;LIDL;
@@ -52,8 +55,8 @@ OFF-Legal fees;GB-35314369001;Vízum
 OFF-Legal fees;US EMBASSY BUDAPE;Vízum
 OFF-Legal fees;Kincstár(K07);
 Payment-V;Morgan Stanley munkabér utalás;
-Pending payment;NA | NA | 5262 XXXX XXXX 2130 / null;
-Pending payment;NA | NA | 4476 XXXX XXXX 1025 / null;
+Pending payment; |  | 5262 XXXX XXXX 2130 / null;
+Pending payment; |  | 4476 XXXX XXXX 1025 / null;
 REL-Eating out;E'TTEREM;
 REL-Eating out;Nandori es Tarsa Kft.;Cukrászda
 REL-Eating out;WOKZILLA;
@@ -74,6 +77,7 @@ Transfer;SZABÓ VIKTOR | 11773054-00576712-00000000 | ;
 Transfer;SZABÓ VIKTOR | 10918001-00000023-19880045 | ;
 Transfer;SZABÓ VIKTOR | 10918001-00000023-19880021 | ;
 Transfer;Projektek;
+Transfer;CAPITAL ONE ONLINE PYMT AuthDate;
 Transfer;OTP EGÉSZSÉGPÉNZTÁR;
 Transfer;OTP Egészségpénztár;
 Transfer;Megtakarítás;
@@ -83,5 +87,5 @@ TRS-National;NEPLIGET AUTOBUSZ-ALL;
 TRS-National;vonat jegy;
 TRS-National;HU-DEBRECEN MA'V DEBRECEN;
 TRS-Public;BKK AUTOMATA;
-Withdrawal;HU-BUDAPEST 89000695 | NA | ATM kifizetés;
-Withdrawal;HU-Budapest Szabadsag ter | NA | ATM kifizetés(;
+Withdrawal;HU-BUDAPEST 89000695 |  | ATM kifizetés;
+Withdrawal;HU-Budapest Szabadsag ter |  | ATM kifizetés(;
