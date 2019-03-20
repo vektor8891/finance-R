@@ -9,10 +9,11 @@
 source("read.R")
 source("check.R")
 
-dt <- read(fn = "input.xlsx", folder = "reports/", year = 2019, verbose = F)
-dt <- check(dt, showAll = F, strictMode = T, verbose = T)
+dt <- read.all(fn = "input.xlsx", folder = "reports/", year = 2019, verbose = F)
+dt <- summarize.all(dt)
 
-browser()
+check.all(dt, showPairs = F, strictMode = T, verbose = T)
+
 
 # check.duplicates(d, threshold = report$Duplicates, verbose = verbose)
 

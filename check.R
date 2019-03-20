@@ -1,128 +1,20 @@
-balance.summary <- function(dt) {
-  # Summarize initial balance
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $fx: FX rates
-  #
-  # Returns:
-  #   dt: list of data.tables
-  dt$initBalance[, InitialHUF := HUF + USD * dt$fx["USD"] + EUR * dt$fx["EUR"]]
-  dt$initBalance[, InitialUSD := round(InitialHUF / dt$fx["USD"], 2)]
-  return(dt)
-}
+library(data.table)
 
-cash.summary <- function(dt, adjustment = "We don't know!!!", verbose = F) {
-  # Summarize cash inventory
+check.all <- function(dt, showPairs = F, strictMode = T, verbose = F) {
+  # Check transactions
   #
   # Args:
   #   dt: list of data.tables
-  #     $fx: FX rates
-  #     $folderInput: input folder
   #   file: path to file
-  #   adjustmentColName: name for manual adjustments
-  #   verbose: print additional information
-  #
-  # Returns:
-  #   dt: list of data.tables
-  dt$notes[, AmountHUF := Notional * Amount * dt$fx[Currency]]
-  dt$notes[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
-  if (nrow(dt$notes[is.na(AmountHUF), ]) > 0) {
-    cat("Error: cash conversion failed:\n")
-    print(dt$notes[is.na(AmountHUF), ])
-    stop()
-  }
-  sapply(unique(dt$notes[, Currency]), function (ccy) {
-    adjustmentCcy <- dt$notes[Note == adjustment & Currency == ccy]
-    if (nrow(adjustmentCcy) != 1) {
-      cat(paste0(nrow(adjustmentCcy), " adjustment row(s) with note '",
-                 adjustment, "'found for ", ccy, " (1 expected)\n"))
-      stop()
-    }
-  })
-  dt$adjustmentHUF <- sum(dt$notes[Note == adjustment, AmountHUF])
-  dt$adjustmentUSD <- sum(dt$notes[Note == adjustment, AmountUSD])
-  dt$notesHUF <- sum(dt$notes[is.na(Note) | Note != adjustment, AmountHUF])
-  dt$notesUSD <- sum(dt$notes[is.na(Note) | Note != adjustment, AmountUSD])
-  if (verbose) {
-    cat(paste0("Notes: ", dt$notesHUF, " HUF\t",
-               "(", dt$notesUSD, " USD)\n",
-               "Adjustment: ", dt$adjustmentHUF, " HUF\t",
-               "(", dt$adjustmentUSD, " USD)\n"))
-  }
-  return(dt)
-}
-
-check.category <- function(dt, catName, showAll = F, strictMode = T,
-                           verbose = F) {
-  # Check if transactions for given category match target
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $all: all transactions
-  #     $targets: target amounts for each categories
-  #   catName: category name
-  #   showAll: if TRUE, shows all transactions if no match. if FALSE, shows only
-  #     those transactions where that have no opposite transaction
+  #   showPairs: if TRUE, shows all transactions pairs in check.category()
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  dtCat <- dt$all[Category == catName, ]
-  dtCat <- find.pairs(dtCat, verbose = F)
-  catSumHUF <- sum(dtCat[, AmountHUF])
-  targetHUF <- 0
-  if (hasName(dt$targetHUF, catName)) targetHUF <- dt$targetHUF[catName]
-  diffHUF <- catSumHUF - targetHUF
-  if (abs(diffHUF) > 0.01) {
-    setorder(dtCat[HasPair == FALSE], Date)
-    if (showAll) print(dtCat) else print(dtCat[HasPair == FALSE])
-    cat(paste0("WARNING: '", catName, "' transactions don't match ",
-               "with target ", targetHUF, " HUF!\n",
-               "HINT: to dismiss error set target to ",
-               round(catSumHUF, 2), " HUF\n"))
-    if (strictMode) stop()
-  } else if (verbose) {
-    cat(paste0("PASS: '", catName, "' transactions match ",
-               "with target ", targetHUF, " HUF\n"))
-  }
-}
-
-check.notes <- function(dt, strictMode = T, verbose = F) {
-  # Check if notes match with cash transactions
-  #
-  # Compare total value of coins and notes with initial cash balance and
-  # total cash transations. Throws error when amounts don't match. Error
-  # can be manually remidiated by adjusting initial cash balance.
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $fx: FX rates
-  #   strictMode: if check fails throws error if TRUE and warning if FALSE
-  #   verbose: print additional information
-  #
-  # Returns:
-  #   dt: list of data.tables
-  dt <- cash.summary(dt, verbose = verbose)
-  dt <- balance.summary(dt)
-  initialHUF <- dt$initBalance[Account == "Cash", InitialHUF]
-  amountHUF <- sum(dt$all[Account == "Cash", AmountHUF])
-  currentHUF <- initialHUF + amountHUF
-  totalHUF <- dt$notesHUF + dt$adjustmentHUF
-  diffHUF <- currentHUF - totalHUF
-  if (abs(diffHUF) > 0.01) {
-    cat("WARNING: Mismatch between notes and cash transactions!\n",
-        "A. Initial:\t\tHUF ", initialHUF, "\n",
-        "B. Transactions:\tHUF ", amountHUF, "\n",
-        "C. Current (A+B):\tHUF ", currentHUF, "\n",
-        "D. Notes:\t\tHUF ", dt$notesHUF, "\n",
-        "E. Adjustment:\t\tHUF ", dt$adjustmentHUF, "\n",
-        "F. Total (D+E):\tHUF ", totalHUF, "\n",
-        "------------------------------------\n",
-        "G. DIFFERENCE (F-C):\tHUF ", diffHUF, "\n",
-        "HINT: to dismiss error change initial cash adjustment to HUF",
-        dt$adjustmentHUF + diffHUF,"(E+G)\n")
-    if (strictMode) stop()
-  } else if (verbose) cat("PASS: Notes and cash transations match (adjustment:",
-                          dt$adjustmentHUF, "HUF)\n")
+  check.missing.category(dt, strictMode = strictMode, verbose = verbose)
+  check.patterns(dt, strictMode = strictMode, verbose = verbose)
+  check.cash(dt, strictMode = strictMode, verbose = verbose)
+  check.balance(dt, strictMode = strictMode, verbose = verbose)
+  check.category.target(dt, strictMode = strictMode, verbose = verbose)
+  check.duplicates(dt, strictMode = strictMode, verbose = verbose)
 }
 
 check.balance <- function(dt, strictMode = T, verbose = F) {
@@ -137,20 +29,18 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
   #     $fx: FX rates
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  dtBal <- dt$yearBalance
-  dtBal[is.na(dtBal)] <- 0
-  dt$all <- add.adjustment(dt, dtBal[Adjustment != 0])
-  if (nrow(dtBal) > 0) {
-    for (row in 1:nrow(dtBal)) {
-      account <- dtBal[row, Account]
-      month <- dtBal[row, Month]
-      ccy <- dtBal[row, Currency]
-      day <- ifelse(dtBal[row, Day] != 0, dtBal[row, Day], 31)
+  bal <- dt$yearBalance[Account != "Cash" & !is.na(Balance)]
+  if (nrow(bal) > 0) {
+    for (row in 1:nrow(bal)) {
+      account <- bal[row, Account]
+      month <- bal[row, Month]
+      ccy <- bal[row, Currency]
+      day <- ifelse(is.na(bal[row, Day]), 31, bal[row, Day])
       finalDate <- ifelse(day == 31, paste0("month ", month),
                           paste0(month, "/", day))
       fx <- dt$fx[ccy]
-      adjust <- dtBal[row, Adjustment]
-      balance <- dtBal[row, Balance]
+      adjust <- bal[row, Adjustment]
+      balance <- bal[row, Balance]
       initial <- round(dt$initBalance[Account == account, InitialHUF] / fx, 2)
       trans <- round(sum(dt$all[Account == account & (Month < month
                                                       | (Month == month & Day <= day)), AmountHUF])
@@ -178,21 +68,197 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
   }
 }
 
-check <- function(dt, showAll = F, strictMode = T, verbose = F) {
-  # Check transactions
+check.cash <- function(dt, strictMode = T, verbose = F) {
+  # Check if notes match with cash transactions
+  #
+  # Compare total value of coins and notes with initial cash balance and
+  # total cash transations. Throws error when amounts don't match. Error
+  # can be manually remidiated by adjusting initial cash balance.
   #
   # Args:
   #   dt: list of data.tables
-  #   file: path to file
-  #   showAll: if TRUE, shows all transactions in check.category()
+  #     $fx: FX rates
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  check.notes(dt, strictMode = strictMode, verbose = verbose)
-  check.balance(dt, strictMode = strictMode, verbose = verbose)
-  check.category(dt, catName = "Withdrawal", strictMode = strictMode,
-                 verbose = verbose)
-  check.category(dt, catName = "Transfer", showAll = showAll,
-                 strictMode = strictMode, verbose = verbose)
+  #
+  # Returns:
+  #   dt: list of data.tables
+  initialHUF <- dt$initBalance[Account == "Cash", InitialHUF]
+  adjustHUF <- sum(dt$all[Account == "Cash" & Category == "Adjustment",
+                          AmountHUF])
+  notesHUF <- sum(dt$notes$AmountHUF)
+  transHUF <- sum(dt$all[Account == "Cash", AmountHUF])
+  currentHUF <- initialHUF + transHUF
+  diffHUF <- currentHUF - notesHUF
+  if (abs(diffHUF) > 0.01) {
+    cat("WARNING: Mismatch between notes and cash transactions!\n",
+        "A. Initial:\t\tHUF ", initialHUF, "\n",
+        "B. Transactions:\tHUF ", transHUF, "\n",
+        "C. Current (A+B):\tHUF ", currentHUF, "\n",
+        "D. Notes:\t\tHUF ", notesHUF, "\n",
+        "------------------------------------\n",
+        "G. DIFFERENCE (D-C):\tHUF ", diffHUF, "\n",
+        "HINT: to dismiss error change initial cash adjustment to HUF",
+        diffHUF,"(E+G)\n")
+    if (strictMode) stop()
+  } else if (verbose) cat("PASS: Notes and cash transations match (adjustment:",
+                          adjustHUF, "HUF)\n")
 }
 
+check.category.target <- function(dt,  showPairs = F, strictMode = T,
+                           verbose = F) {
+  # Check if transactions for given category match target
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: all transactions
+  #     $targets: target amounts for each categories
+  #   catName: category name
+  #   showPairs: if TRUE, shows all transactions if no match. if FALSE, shows
+  #     only those transactions where that have no opposite transaction
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
+  #   verbose: print additional information
+  for (row in 1:nrow(dt$target)) {
+    catName <- dt$target[row, Category]
+    targetHUF <- dt$target[row, Target * dt$fx[Currency]]
+    dtCat <- dt$all[Category == catName]
+    dtCat <- find.pairs(dtCat, verbose = F)
+    catSumHUF <- sum(dtCat[, AmountHUF])
+    diffHUF <- catSumHUF - targetHUF
+    if (abs(diffHUF) > 0.01) {
+      setorder(dtCat[HasPair == FALSE], Date)
+      if (showPairs) print(dtCat) else print(dtCat[HasPair == FALSE])
+      cat(paste0("WARNING: '", catName, "' transactions don't match ",
+                 "with target ", targetHUF, " HUF!\n",
+                 "HINT: to dismiss error set target to ",
+                 round(catSumHUF, 2), " HUF\n"))
+      if (strictMode) stop()
+    } else if (verbose) {
+      cat(paste0("PASS: '", catName, "' transactions match ",
+                 "with target ", targetHUF, " HUF\n"))
+    }
+  }
+}
+
+check.duplicates <- function(dt, strictMode = T, verbose = F) {
+  # Check for duplicates in transactions
+  #
+  # Check if:
+  #   1. duplicated transactions for given account & month match with threshold
+  #   2. total duplicated rows match total threshold
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: data.table without duplicates
+  dup <- dt$yearBalance[Duplicates > 0]
+  if (nrow(dup) > 0) {
+    for (row in 1:nrow(dup)) {
+      threshold <- dup[row, Duplicates]
+      account <- dup[row, Account]
+      month <- dup[row, Month]
+      dupTrans <- dt$all[Account == account & Month == month & 
+                           duplicated(dt$all), ]
+      if (nrow(dupTrans) != threshold) {
+        cat("Error: duplicated transaction(s) in ", account, "for month ",
+            month, " don't match with target ", threshold, "\n")
+        print(dupTrans)
+        cat("HINT: to remove error set threshold to", nrow(dupTrans), "\n")
+        if (strictMode) stop()
+      } else {
+        cat(paste0("PASS: duplicated transactions in ", account, " for month ",
+                   month, " match with target ", threshold, "\n"))
+      }
+    }
+  }
+  thresholdTotal <- sum(dt$yearBalance[Duplicates > 0, Duplicates])
+  dtDupTotal <- dt$all[duplicated(dt$all), ]
+  if (nrow(dtDupTotal) != thresholdTotal) {
+    cat("Error: total duplicated transaction(s) don't match with target ",
+        thresholdTotal, "\n")
+    print(dtDupTotal)
+    cat("HINT: to remove error set threshold to ", nrow(dtDupTotal), "\n")
+    if (strictMode) stop()
+  } else {
+    cat(paste0("PASS: total duplicated transaction(s) match with target ",
+               thresholdTotal, "\n"))
+  }
+}
+
+check.missing.category <- function(dt, strictMode = T, verbose = F) {
+  # Check for missing categories
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: data.table without duplicates
+  dtMissing <- setorder(dt$all, Category)[is.na(Category)]
+  if (nrow(dtMissing) == 0) {
+    if (verbose) cat("PASS: no missing category found\n")
+  } else {
+    if (verbose) cat("FAIL: missing cagegory found:\n")
+    print(dtMissing)
+    if (strictMode) stop()
+  }
+}
+
+check.patterns <- function(dt, strictMode = T, verbose = F) {
+  # Check if all patterns are used to assign category
+  #
+  # Categories are assigned by patterns. If pattern is not used, it should be
+  # deleted.
+  #
+  # Args:
+  #   dt: list of data.tables
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
+  #   verbose: print additional information
+  unused <- dt$patterns[Category != "Adjustment" & Match == 0]
+  if (nrow(unused) > 0) {
+    if (verbose) cat("FAIL: unused patterns found:\n")
+    print(unused)
+    if (strictMode) stop()
+  } else {
+    if (verbose) cat("PASS: no unused patterns found\n")
+  }
+}
+
+
+find.pairs <- function(dt, days = 7, verbose = F) {
+  # Find transation with same amount within date range
+  #
+  # Args:
+  #   dt: data.table of transactions
+  #   days: length of date range
+  #   verbose: print additional information
+  #
+  # Return:
+  #   dt: data.table with HasPair column
+  dt$HasPair <- FALSE
+  dt$RowID <- 1:nrow(dt)
+  setorder(dt, Date)
+  for (row in 1:nrow(dt)) {
+    if (!dt[row, HasPair]) {
+      huf <- dt[row, AmountHUF]
+      date  <- dt[row, Date]
+      account  <- dt[row, Account]
+      pairRows <- dt[Account != account & AmountHUF == -huf & !HasPair]
+      if (nrow(pairRows) > 0) {
+        dateRow <- pairRows[1, Date]
+        diff <- as.Date(dateRow, "%Y.%m.%d") - as.Date(date, "%Y.%m.%d")
+        if (abs(as.numeric(diff)) <= days) {
+          dt[row, HasPair := TRUE]
+          dt[RowID == pairRows[1, RowID], HasPair := TRUE]
+          if (verbose) cat(paste0("Pair found for ", huf, "HUF (", date, ")\n"))
+        }
+      }
+    }
+  }
+  return(dt[, RowID := NULL])
+}
 
