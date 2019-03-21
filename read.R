@@ -2,51 +2,55 @@ library(data.table)
 library(readxl)
 library(qdap)
 library(xlsx)
+library(gsubfn)
 
 add.adjustment <- function(dt) {
   # Add adjustment to transactions
   #
   # Args:
   #   dt: list of data.tables
-  #   adjustmentData: data.table containing adjustment 
+  #     $year: year name
+  #     $monthlyBalance: monthly balance statements
   #
   # Returns:
-  #   dt: list of data.table with updated transactions
-  dtBal <- dt$yearBalance[Adjustment != 0]
-  dtBal$Year <- dt$year
-  dt$report <- add.columns(dtBal, type = "adjust")
-  dt <- finalize(dt)
-  dt$all <- merge.dt(dt$all, dt$report, "adjust")
+  #   dt: list of data.tables
+  #     $all: all transactions with adjustment
+  d <- dt$monthlyBalance[Adjustment != 0]
+  d$Year <- dt$year
+  d <- add.columns(d, type = "adjust")
+  list[d, ] <- finalize(dt, d)
+  dt$all <- merge.dt(dt$all, d, "adjust")
   return(dt)
 }
 
-add.category <- function(dt, verbose = F) {
+add.category <- function(patterns, d, verbose = F) {
   # Add category for transactions based on patterns
   #
   # Args:
-  #   dt: data.table to check (must contain Detail column)
-  #   patternData: data.table containing patterns 
+  #   patterns: data.table for patterns
+  #   d: data.table to check
   #   verbose: print additional information
   #
   # Returns:
-  #   dt: data.table
-  for (row in 1:nrow(dt$report)) {
-    if (is.na(dt$report[row, Category])) {
-      huf <- dt$report[row, AmountHUF]
-      detail  <- dt$report[row, Details]
-      date  <- dt$report[row, Date]
-      account  <- dt$report[row, Account]
+  #   d: data.table with category
+  #   patterns: patterns data with updated match results
+  for (row in 1:nrow(d)) {
+    if (is.na(d[row, Category])) {
+      huf <- d[row, AmountHUF]
+      detail  <- d[row, Details]
+      date  <- d[row, Date]
+      account  <- d[row, Account]
       if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
-      dt <- get.category.pattern(dt, detail, verbose = verbose)
-      if (!is.na(dt$catPtn)) {
-        dt$report[row, Category := dt$catPtn]
+      list[categ, pattern] <- get.pattern(patterns, detail, verbose = verbose)
+      if (!is.null(categ)) {
+        d[row, Category := categ]
+        patterns[Pattern %in% pattern, Match := Match + 1]
         next
       }
     }
   }
-  dt$report <- dt$report[,.(Category = unlist(Category)),
-                         by = setdiff(names(dt$report), 'Category')]
-  return(dt)
+  d <- d[, .(Category = unlist(Category)), by = setdiff(names(d), 'Category')]
+  return(list(d, patterns))
 }
 
 add.columns <- function(d, type = "normal", negate = FALSE) {
@@ -101,6 +105,7 @@ balance.summary <- function(dt) {
   #
   # Args:
   #   dt: list of data.tables
+  #     $initBalance: initial balance
   #     $fx: FX rates
   #
   # Returns:
@@ -110,19 +115,19 @@ balance.summary <- function(dt) {
   return(dt)
 }
 
-cash.summary <- function(dt, adjustment = "We don't know!!!", verbose = F) {
+cash.summary <- function(dt) {
   # Summarize cash inventory
   #
   # Args:
   #   dt: list of data.tables
+  #     $notes: notes inventory
   #     $fx: FX rates
-  #     $folderInput: input folder
-  #   file: path to file
-  #   adjustmentColName: name for manual adjustments
-  #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
+  #     $notes: notes with HUF/USD amount
+  #     $notesHUF: total HUF value of notes
+  #     $notesUSD: total USD value of notes
   dt$notes[, AmountHUF := Notional * Amount * dt$fx[Currency]]
   dt$notes[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
   dt$notesHUF <- sum(dt$notes$AmountHUF)
@@ -137,9 +142,6 @@ check.column <- function(dataAll, dataCurrent, colName) {
   #   dataAll: data.table containing all correct values
   #   dataCurrent: data.table containing current values
   #   colName: column name to check
-  #
-  # Returns:
-  #   Nothing. Throws an error if unknown value found.
   catAll <- unique(dataAll[[colName]])
   catAct <- unique(dataCurrent[[!is.na(colName), colName]])
   if (!is.na(catAct)) {
@@ -152,12 +154,12 @@ check.column <- function(dataAll, dataCurrent, colName) {
   }
 }
 
-finalize <- function(dt) {
+finalize <- function(dt, d) {
   # Finalize data.table
   #
   # - Remove extra columns
   # - Filter data for given year
-  # - Add Month/AmountHUF/AmountUSD columns
+  # - Add Month/Day/AmountHUF/AmountUSD columns
   # - Add missing categories
   # - Check Account/Category values
   #
@@ -168,67 +170,66 @@ finalize <- function(dt) {
   #     $income: data.table for categories
   #     $initBalance: data.table for accounts
   #   d: data.table to check
-  #   checkCol: check columns
   #
   # Returns:
-  #   dt: data.table
-  if (!hasName(dt$report, "Category")) dt$report[, Category := character()]
-  dt$report <- dt$report[, .(Account, Details, Date, Amount, Category,
-                             Currency)]
-  dt$report <- dt$report[substr(Date, 1, 4) == dt$year, ]
-  dt$report[, Date := sapply(Date, function(x) {
+  #   d: updated data.table
+  #   patterns: updated data.table for patterns
+  if (!hasName(d, "Category")) d[, Category := character()]
+  d <- d[, .(Account, Details, Date, Amount, Category, Currency)]
+  d <- d[substr(Date, 1, 4) == dt$year, ]
+  d[, Date := sapply(Date, function(x) {
     gsub("-", ".", substr(x, 1, 10))
     })]
-  dt$report[, Month := sapply(Date, function(x) as.integer(substr(x, 6, 7)))]
-  dt$report[, Day := sapply(Date, function(x) as.integer(substr(x, 9, 10)))]
-  dt$report[, AmountHUF := Amount * dt$fx[Currency]]
-  dt$report[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
-  dt <- add.category(dt, verbose = F)
-  check.column(dt$income, dt$report, "Category")
-  check.column(dt$initBalance, dt$report, "Account")
-  return(dt)
+  d[, Month := sapply(Date, function(x) as.integer(substr(x, 6, 7)))]
+  d[, Day := sapply(Date, function(x) as.integer(substr(x, 9, 10)))]
+  d[, AmountHUF := Amount * dt$fx[Currency]]
+  d[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
+  list[d, patterns] <- add.category(dt$patterns, d, verbose = F)
+  check.column(dt$income, d, "Category")
+  check.column(dt$initBalance, d, "Account")
+  return(list(d, patterns))
 }
 
-get.category.pattern <- function(dt, detail, verbose = F) {
+get.pattern <- function(patternData, detail, verbose = F) {
   # Get category for transation from patterns
   #
   # Args:
-  #   detail: transaction detail
   #   patternData: data.table containing patterns
+  #   detail: transaction detail
   #   verbose: print additional information
   #
   # Returns:
-  #   catPtn: category
-  dt$catPtn <- NA
-  patterns <- dt$patterns[, Pattern]
+  #   category: category name
+  #   pattern: pattern name (can be multiple)
+  pattern <- NULL
+  category <- NULL
+  patterns <- patternData[, Pattern]
   matchResults <- sapply(patterns, grepl, gsub("\u00A0", " ", detail),
                          fixed = T)
   matchResults <- matchResults[matchResults == T]
-  catPatternAll <- dt$patterns[Pattern %in% names(matchResults), Category]
-  if (length(unique(catPatternAll)) > 1) {
+  pattern <- names(matchResults)
+  catPatternAll <- patternData[Pattern %in% pattern, Category]
+  category <- unique(catPatternAll)
+  if (length(category) > 1) {
     cat(paste0("\nMultiple match: '", names(matchResults), "' in\n", detail))
     stop()
-  } else if (length(unique(catPatternAll)) == 1) {
-    dt$catPtn <- unique(catPatternAll)
-    dt$patterns[Pattern %in% names(matchResults), Match := Match + 1]
-    if (verbose) cat(paste0("\t'", dt$catPtn, "' based on '",
-                            names(matchResults), "'\n"))
+  } else if (length(category) == 1) {
+    if (verbose) cat(category, "based on", pattern, "\n")
   }
-  return(dt)
+  return(c(category, pattern))
 }
 
-get.report.type <- function(dt, file) {
+get.report.type <- function(reports, file) {
   # Get report type
   #
   # Args:
-  #   dt: list of data.tables
-  #     $reportTypes: list of report types
+  #   reports: data.table of report types
   #   file: file name
   #   types: report types
   #
   # Returns:
   #   type: type of report
-  types <- dt$reportTypes$Type
+  types <- reports$Type
   for (i in 1:length(types)) {
     if (grepl(tolower(types[i]), tolower(file), fixed = TRUE)) {
       type <- types[i]
@@ -299,8 +300,8 @@ read.file <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
     if (verbose) cat(dim(dt)[[1]], "rows imported from:", fn, "\n")
     return(d)
   } else {
-    if (verbose) cat("File not found:", fn, "\n")
-    return(data.table())
+    cat("Error: file not found:", fn, "\n")
+    stop
   }
 }
 
@@ -322,7 +323,7 @@ read.input <- function(fn, verbose = F) {
   dt$reportTypes <- read.dt(fn, sheet = "report_types")
   fxRates <- read.dt(fn, sheet = "fx_rates")
   dt$fx <- setNames(fxRates$FXRate, fxRates$Currency)
-  dt$yearBalance <- read.dt(fn, sheet = "balance_monthly")
+  dt$monthlyBalance <- read.dt(fn, sheet = "balance_monthly")
   dt$initBalance <- read.dt(fn, sheet = "balance_initial")
   dt$target <- read.dt(fn, sheet = "target_categories")
   dt$target[, TargetHUF := Target * dt$fx[Currency]]
@@ -343,16 +344,18 @@ read.report <- function(dt, file, type = "normal", verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
+  #     $all: all transactions
+  #     $patterns: patterns with updated math results
   rep <- dt$reportTypes[Type == type]
-  dt$report <- read.file(file, folder = dt$folderReports, skip = rep$Skip,
+  d <- read.file(file, folder = dt$folderReports, skip = rep$Skip,
                  sep = rep$Separator, verbose = verbose)
-  dt <- rename(dt, type)
+  d <- rename(d, type, dt$rules, verbose = verbose)
   negate <- grepl("debit", tolower(file))
-  dt$report <- add.columns(dt$report, type, negate)
-  if (!is.na(rep$Currency)) dt$report$Currency <- rep$Currency
-  if (!is.na(rep$Account)) dt$report$Account <- rep$Account
-  dt <- finalize(dt)
-  dt$all <- merge.dt(dt$all, dt$report, name = "dt$all", verbose = verbose)
+  d <- add.columns(d, type, negate)
+  if (!is.na(rep$Currency)) d$Currency <- rep$Currency
+  if (!is.na(rep$Account)) d$Account <- rep$Account
+  list[d, dt$patterns] <- finalize(dt, d)
+  dt$all <- merge.dt(dt$all, d, name = "dt$all", verbose = verbose)
   return(dt)
 }
 
@@ -372,7 +375,7 @@ read.all <- function(fn, folder, year, verbose = F) {
   dt$folderReports <- folder
   dt$year <- year
   for (fn in list.files(path = folder)) {
-    type <- get.report.type(dt, fn)
+    type <- get.report.type(dt$reportTypes, fn)
     if (!is.null(type)) {
       if (verbose) cat("Read report:", fn, "\n")
       dt <- read.report(dt, fn, type, verbose = verbose)
@@ -381,34 +384,31 @@ read.all <- function(fn, folder, year, verbose = F) {
   return(dt)
 }
 
-rename <- function(dt, type, verbose = F) {
+rename <- function(d, type, rules, verbose = F) {
   # Rename values in data.table
   #
   # Args:
-  #   dt: list of data.tables
-  #     $report: data to rename
-  #     $rules: renaming rules
+  #   d: data.table
+  #   rules: data.table containing renaming rules
   #   type: filter for 'Type' column in rules data.table
   #   verbose: print additional information
   #
   # Returns:
-  #   dt: list of updated data.tables
-  # Rename columns
-  rulesCol <- dt$rules[Type == type & Value == "Column"]
+  #   d: renamed data.table
+  rulesCol <- rules[Type == type & Value == "Column"]
   if (nrow(rulesCol) > 0) {
     if (verbose) cat(nrow(rulesCol), "column(s) renamed")
-    setnames(dt$report, rulesCol$From, rulesCol$To)
+    setnames(d, rulesCol$From, rulesCol$To)
   }
-  # Rename values
-  rulesVal <- dt$rules[Type == type & Value != "Column"]
+  rulesVal <- rules[Type == type & Value != "Column"]
   if (nrow(rulesVal) > 0) {
     if (verbose) cat(nrow(rulesVal), "value(s) renamed")
     for (i in 1:nrow(rulesVal)) {
-      dt$report <- dt$report[get(rulesVal[i, Value]) == rulesVal[i, From],
-                             c(rulesVal[i, Value]) := rulesVal[i, To]]
+      d <- d[get(rulesVal[i, Value]) == rulesVal[i, From],
+             c(rulesVal[i, Value]) := rulesVal[i, To]]
     }
   }
-  return(dt)
+  return(d)
 }
 
 summarize.all <- function(dt) {

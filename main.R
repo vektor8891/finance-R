@@ -14,7 +14,6 @@ dt <- summarize.all(dt)
 
 check.all(dt, showPairs = F, strictMode = T, verbose = T)
 
-
 # check.duplicates(d, threshold = report$Duplicates, verbose = verbose)
 
 # folderInput <- "input/"

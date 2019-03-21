@@ -5,12 +5,11 @@ check.all <- function(dt, showPairs = F, strictMode = T, verbose = F) {
   #
   # Args:
   #   dt: list of data.tables
-  #   file: path to file
   #   showPairs: if TRUE, shows all transactions pairs in check.category()
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  check.missing.category(dt, strictMode = strictMode, verbose = verbose)
-  check.patterns(dt, strictMode = strictMode, verbose = verbose)
+  check.missing.category(dt$all, strictMode = strictMode, verbose = verbose)
+  check.patterns(dt$patterns, strictMode = strictMode, verbose = verbose)
   check.cash(dt, strictMode = strictMode, verbose = verbose)
   check.balance(dt, strictMode = strictMode, verbose = verbose)
   check.category.target(dt, strictMode = strictMode, verbose = verbose)
@@ -27,9 +26,10 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
   # Args:
   #   dt: list of data.tables
   #     $fx: FX rates
+  #     $monthlyBalance: monthly balances
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  bal <- dt$yearBalance[Account != "Cash" & !is.na(Balance)]
+  bal <- dt$monthlyBalance[Account != "Cash" & !is.na(Balance)]
   if (nrow(bal) > 0) {
     for (row in 1:nrow(bal)) {
       account <- bal[row, Account]
@@ -39,7 +39,7 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
       finalDate <- ifelse(day == 31, paste0("month ", month),
                           paste0(month, "/", day))
       fx <- dt$fx[ccy]
-      adjust <- bal[row, Adjustment]
+      adjust <- ifelse(is.na(bal[row, Adjustment]), 0, bal[row, Adjustment])
       balance <- bal[row, Balance]
       initial <- round(dt$initBalance[Account == account, InitialHUF] / fx, 2)
       trans <- round(sum(dt$all[Account == account & (Month < month
@@ -48,10 +48,11 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
       total <- initial + trans
       diff <- total - balance
       adjustNew <- round(adjust - diff, 2)
+      adjComment <- ifelse(adjust == 0, "", paste0("\n\t(*adjustment: ", ccy, " ",
+                                                   adjust, ")"))
       if (abs(diff) > 0.01) {
-        cat(paste0("WARNING: ", account, " transactions don't match with ",
-                   "balance for ", finalDate, "!\n",
-                   "A. Initial:\t\t", ccy, " ", initial, "\n",
+        cat(paste0("WARNING: ", account, " balance error for ", finalDate,
+                   "!\n", "A. Initial:\t\t", ccy, " ", initial, "\n",
                    "B. Transactions:\t", ccy, " ", trans, "\n",
                    "C. Current (A+B):\t", ccy, " ", total, "\n",
                    "D. Balance:\t\t", ccy, " ", balance, "\n",
@@ -60,9 +61,8 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
                    " to ", ccy, " ", adjustNew, "\n"))
         if (strictMode) stop()
       } else if (verbose) {
-        cat(paste0("PASS: ", account, " transactions match with ",
-                   "balance for month ", month, " (adjustment: ", ccy, " ",
-                   adjust, ")\n"))
+        cat(paste0("PASS: ", account, " balance correct for ", finalDate,
+                   adjComment,"\n"))
       }
     }
   }
@@ -78,6 +78,9 @@ check.cash <- function(dt, strictMode = T, verbose = F) {
   # Args:
   #   dt: list of data.tables
   #     $fx: FX rates
+  #     $initBalance: initial balance
+  #     $all: all transactions
+  #     $notes: cash inventory
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
   #
@@ -112,8 +115,7 @@ check.category.target <- function(dt,  showPairs = F, strictMode = T,
   # Args:
   #   dt: list of data.tables
   #     $all: all transactions
-  #     $targets: target amounts for each categories
-  #   catName: category name
+  #     $target: target amounts for each categories
   #   showPairs: if TRUE, shows all transactions if no match. if FALSE, shows
   #     only those transactions where that have no opposite transaction
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
@@ -128,14 +130,12 @@ check.category.target <- function(dt,  showPairs = F, strictMode = T,
     if (abs(diffHUF) > 0.01) {
       setorder(dtCat[HasPair == FALSE], Date)
       if (showPairs) print(dtCat) else print(dtCat[HasPair == FALSE])
-      cat(paste0("WARNING: '", catName, "' transactions don't match ",
-                 "with target ", targetHUF, " HUF!\n",
+      cat(paste0("WARNING: sum(", catName, ") != ", targetHUF, " HUF!\n",
                  "HINT: to dismiss error set target to ",
                  round(catSumHUF, 2), " HUF\n"))
       if (strictMode) stop()
     } else if (verbose) {
-      cat(paste0("PASS: '", catName, "' transactions match ",
-                 "with target ", targetHUF, " HUF\n"))
+      cat(paste0("PASS: sum(", catName, ") = ", targetHUF, " HUF\n"))
     }
   }
 }
@@ -149,12 +149,14 @@ check.duplicates <- function(dt, strictMode = T, verbose = F) {
   #
   # Args:
   #   dt: list of data.tables
+  #     $monthlyBalance: monthly balances
+  #     $all: all transactions
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
   #
   # Returns:
   #   dt: data.table without duplicates
-  dup <- dt$yearBalance[Duplicates > 0]
+  dup <- dt$monthlyBalance[Duplicates > 0]
   if (nrow(dup) > 0) {
     for (row in 1:nrow(dup)) {
       threshold <- dup[row, Duplicates]
@@ -163,28 +165,26 @@ check.duplicates <- function(dt, strictMode = T, verbose = F) {
       dupTrans <- dt$all[Account == account & Month == month & 
                            duplicated(dt$all), ]
       if (nrow(dupTrans) != threshold) {
-        cat("Error: duplicated transaction(s) in ", account, "for month ",
-            month, " don't match with target ", threshold, "\n")
+        cat("Error: duplicated rows in ", account, "for month ",
+            month, " != ", threshold, "\n")
         print(dupTrans)
         cat("HINT: to remove error set threshold to", nrow(dupTrans), "\n")
         if (strictMode) stop()
       } else {
-        cat(paste0("PASS: duplicated transactions in ", account, " for month ",
-                   month, " match with target ", threshold, "\n"))
+        cat(paste0("PASS: duplicated rows in ", account, " for month ",
+                   month, " = ", threshold, "\n"))
       }
     }
   }
-  thresholdTotal <- sum(dt$yearBalance[Duplicates > 0, Duplicates])
+  thresholdTotal <- sum(dt$monthlyBalance[Duplicates > 0, Duplicates])
   dtDupTotal <- dt$all[duplicated(dt$all), ]
   if (nrow(dtDupTotal) != thresholdTotal) {
-    cat("Error: total duplicated transaction(s) don't match with target ",
-        thresholdTotal, "\n")
+    cat("Error: total duplicated rows != ", thresholdTotal, "\n")
     print(dtDupTotal)
     cat("HINT: to remove error set threshold to ", nrow(dtDupTotal), "\n")
     if (strictMode) stop()
   } else {
-    cat(paste0("PASS: total duplicated transaction(s) match with target ",
-               thresholdTotal, "\n"))
+    cat(paste0("PASS: total duplicated rows = ", thresholdTotal, "\n"))
   }
 }
 
@@ -192,17 +192,17 @@ check.missing.category <- function(dt, strictMode = T, verbose = F) {
   # Check for missing categories
   #
   # Args:
-  #   dt: list of data.tables
+  #   dt: data.tables for transactions
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
   #
   # Returns:
   #   dt: data.table without duplicates
-  dtMissing <- setorder(dt$all, Category)[is.na(Category)]
+  dtMissing <- setorder(dt, Category)[is.na(Category)]
   if (nrow(dtMissing) == 0) {
-    if (verbose) cat("PASS: no missing category found\n")
+    if (verbose) cat("PASS: no missing categories found\n")
   } else {
-    if (verbose) cat("FAIL: missing cagegory found:\n")
+    if (verbose) cat("FAIL: missing cagegories found:\n")
     print(dtMissing)
     if (strictMode) stop()
   }
@@ -215,10 +215,10 @@ check.patterns <- function(dt, strictMode = T, verbose = F) {
   # deleted.
   #
   # Args:
-  #   dt: list of data.tables
+  #   dt: data.table for patterns
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  unused <- dt$patterns[Category != "Adjustment" & Match == 0]
+  unused <- dt[Category != "Adjustment" & Match == 0]
   if (nrow(unused) > 0) {
     if (verbose) cat("FAIL: unused patterns found:\n")
     print(unused)
