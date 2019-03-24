@@ -239,9 +239,9 @@ find.pairs <- function(dt, days = 7, verbose = F) {
   #
   # Return:
   #   dt: data.table with HasPair column
+  setorder(dt, Date)
   dt$HasPair <- FALSE
   dt$RowID <- 1:nrow(dt)
-  setorder(dt, Date)
   for (row in 1:nrow(dt)) {
     if (!dt[row, HasPair]) {
       huf <- dt[row, AmountHUF]

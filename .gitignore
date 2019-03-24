@@ -1,8 +1,6 @@
-input/initial_balance.csv
-input/cash_inventory.csv
-input/balance_2019.csv
+input.xlsx
+output.xlsx
 reports/
-output/
 .Rproj.user/
 .RData
 .Rhistory

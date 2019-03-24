@@ -4,25 +4,6 @@ library(qdap)
 library(xlsx)
 library(gsubfn)
 
-add.adjustment <- function(dt) {
-  # Add adjustment to transactions
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $year: year name
-  #     $monthlyBalance: monthly balance statements
-  #
-  # Returns:
-  #   dt: list of data.tables
-  #     $all: all transactions with adjustment
-  d <- dt$monthlyBalance[Adjustment != 0]
-  d$Year <- dt$year
-  d <- add.columns(d, type = "adjust")
-  list[d, ] <- finalize(dt, d)
-  dt$all <- merge.dt(dt$all, d, "adjust")
-  return(dt)
-}
-
 add.category <- function(patterns, d, verbose = F) {
   # Add category for transactions based on patterns
   #
@@ -98,41 +79,6 @@ add.columns <- function(d, type = "normal", negate = FALSE) {
     d$Date <- sprintf("%4d.%02d.%02d", d$Year, d$Month, d$Day)
   }
   return(d)
-}
-
-balance.summary <- function(dt) {
-  # Summarize initial balance
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $initBalance: initial balance
-  #     $fx: FX rates
-  #
-  # Returns:
-  #   dt: list of data.tables
-  dt$initBalance[, InitialHUF := HUF + USD * dt$fx["USD"] + EUR * dt$fx["EUR"]]
-  dt$initBalance[, InitialUSD := round(InitialHUF / dt$fx["USD"], 2)]
-  return(dt)
-}
-
-cash.summary <- function(dt) {
-  # Summarize cash inventory
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $notes: notes inventory
-  #     $fx: FX rates
-  #
-  # Returns:
-  #   dt: list of data.tables
-  #     $notes: notes with HUF/USD amount
-  #     $notesHUF: total HUF value of notes
-  #     $notesUSD: total USD value of notes
-  dt$notes[, AmountHUF := Notional * Amount * dt$fx[Currency]]
-  dt$notes[, AmountUSD := round(AmountHUF / dt$fx["USD"], 2)]
-  dt$notesHUF <- sum(dt$notes$AmountHUF)
-  dt$notesUSD <- sum(dt$notes$AmountUSD)
-  return(dt)
 }
 
 check.column <- function(dataAll, dataCurrent, colName) {
@@ -238,18 +184,21 @@ get.report.type <- function(reports, file) {
   }
 }
 
-merge.dt <- function(dtAll, dtNew, name = "data.table", verbose = F) {
+merge.dt <- function(dtAll, dtNew, name = "data.table", by = NULL,
+                     verbose = F) {
   # Merge data.tables
   #
   # Args:
   #   dtAll: data.table with all data
   #   dtNew: data.table with new data
+  #   name: name of data.table
+  #   by: vector of shared column names to merge on
   #   verbose: print additional information
   #
   # Returns:
   #   dt: data.table
   if (nrow(dtAll) == 0) dtAll <- dtNew[FALSE]
-  dt <- merge(dtAll, dtNew, all = T)
+  dt <- merge(dtAll, dtNew, by = by, all = T)
   newRows <- dim(dt)[[1]] - dim(dtAll)[[1]]
   if (verbose) cat(paste0("\n", newRows, " new rows added to ", name, "\n"))
   return(dt)
@@ -409,18 +358,4 @@ rename <- function(d, type, rules, verbose = F) {
     }
   }
   return(d)
-}
-
-summarize.all <- function(dt) {
-  # Summarize values in data.tables
-  #
-  # Args:
-  #   dt: list of data.tables
-  #
-  # Returns:
-  #   dt: list of updated data.tables
-  dt <- add.adjustment(dt)
-  dt <- balance.summary(dt)
-  dt <- cash.summary(dt)
-  return(dt)
 }
