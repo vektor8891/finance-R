@@ -11,10 +11,9 @@ Sys.setlocale("LC_TIME", "English")
 source("read.R")
 source("check.R")
 source("summary.R")
-source("export.R")
 
 Rdata <- "finance.Rdata"
-newRun <- F
+newRun <- T
 
 if (newRun) {
   dt <- read.all(fn = "input.xlsx", folder = "reports/", year = 2019, verbose = F)
@@ -25,4 +24,4 @@ if (newRun) {
   load(Rdata)
 }
 
-export.all(dt, file = "output.xlsx", currency = "HUF", verbose = T)
+source("export.R")

@@ -239,8 +239,8 @@ read.file <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
     if (fileType == "csv") {
       d <- fread(fn, dec = dec, encoding = encoding, sep = sep)
     } else if (fileType %in% c("xlsx", "xls")) {
-      d <- as.data.table(read.xlsx(fn, 1, encoding = encoding,
-                                   startRow = skip + 1))
+      d <- as.data.table(xlsx::read.xlsx(fn, 1, encoding = encoding,
+                                         startRow = skip + 1))
     } else {
       cat("Unknown filetype:", fileType, "in", fn, "\n")
       stop()
@@ -278,6 +278,9 @@ read.input <- function(fn, verbose = F) {
   dt$target[, TargetHUF := Target * dt$fx[Currency]]
   dt$targetHUF <- setNames(dt$target$TargetHUF, dt$target$Category)
   dt$notes <- read.dt(fn, sheet = "cash_inventory")
+  dt$format <- read.dt(fn, sheet = "format")
+  col <- read.dt(fn, sheet = "colors")
+  dt$colors <- setNames(col$Hex, col$Name)
   return(dt)
 }
 

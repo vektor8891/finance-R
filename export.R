@@ -2,7 +2,7 @@ library(pivottabler)
 library(lubridate)
 library(openxlsx)
 
-export.all <- function(dt, file, currency, verbose = F) {
+export.all <- function(dt, folder, ccy, addTimeStamp = F, verbose = F) {
   # Export results
   #
   # Args:
@@ -11,32 +11,33 @@ export.all <- function(dt, file, currency, verbose = F) {
   #     $income: categories
   #     $year: year name
   #   folder: output folder name
-  #   currency: currency (HUF or USD)
+  #   ccy: currency (HUF or USD)
+  #   addTimeStamp: add time stamp to output file name
   #   verbose: print additional information
-  dt$all <- merge(dt$all, dt$income, by = "Category", all.x = T)
-  dt$all <- dt$all[, Date2 := make_date(year = dt$year, month = Month, day = 1L)]
-  dt$all <- dt$all[, Group2 := sapply(Group, function(x) strsplit(x, " - ")[[1]][1])]
-  dt$all <- dt$all[, Category2 := sapply(Category, function(x) sub("^[A-Z]*-", "", x))]
-  dt$all <- dt$all[, Average := "Monthly"]
+  dt <- modify.dt(dt, ccy, folder)
+  fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
+  dt$wb <- createWorkbook(creator = Sys.getenv("USERNAME"))
+  type <- "Group"
+  pt <- create.pivot(dt, type, verbose = verbose)
+  pt <- format.pivot(dt, pt, type, verbose = verbose)
+  dt$wb <- export.pivot(dt, pt = pt, type = type, ccy = ccy, verbose = verbose)
   type <- "Category"
-  pt <- create.pivot(dt, type = type, currency = currency, verbose = verbose)
-  pt <- format.pivot(pt, type = type, verbose = verbose)
-  export.pivot(pt, file, sheet = type, verbose = verbose)
+  pt <- create.pivot(dt, type, verbose = verbose)
+  pt <- format.pivot(dt, pt, type, verbose = verbose)
+  dt$wb <- export.pivot(dt, pt = pt, type = type, ccy = ccy, verbose = verbose)
+  saveWorkbook(dt$wb, file = fn, overwrite = T)
 }
 
-create.pivot <- function(dt, type, currency, avgCalc = "AvgCalc",
-                         sumCalc = "SumCalc", verbose = F) {
+create.pivot <- function(dt, type, verbose = F) {
   # Create pivot table
   #
   # Args:
   #   dt: list of data.tables
   #     $all: all transactions
   #     $year: year name
-  #   type: pivot report type:
-  #     - "category": pivot report for categories
-  #   currency: currency (HUF or USD)
-  #   avgCalc: average calculation name
-  #   sumCalc: sum calculation name
+  #     $calc: calculation names
+  #     $ccy: currency (HUF or USD)
+  #   type: pivot report type
   #   verbose: print additional information
   #
   # Returns:
@@ -44,20 +45,25 @@ create.pivot <- function(dt, type, currency, avgCalc = "AvgCalc",
   if (verbose) cat(paste0("Create '", type, "' pivot table\n"))
   pt <- PivotTable$new()
   pt$addData(dt$all)
-  if (type == "Category") {
+  if (type == "Category" || type == "Group") {
     cg1 <- pt$columnGroup$addChildGroup(caption = "Average")
     cg1$addDataGroups("Average", addTotal = FALSE)
-    cg2 <- pt$columnGroup$addChildGroup(caption = paste0("Total ", currency))
-    cg2$addDataGroups("Date2", dataFormat = list(format = "%b"),
+    cg2 <- pt$columnGroup$addChildGroup(caption = paste0("Total ", dt$ccy))
+    cg2$addDataGroups("Date", dataFormat = list(format = "%b"),
                       totalCaption = as.character(dt$year))
-    pt$addRowDataGroups("Type", totalCaption = "TOTAL")
-    pt$addRowDataGroups("Group2")
-    pt$addRowDataGroups("Category2", totalCaption = "Subtotal")
+    pt$addRowDataGroups("Type", totalCaption = paste0("TOTAL ", dt$ccy))
+    pt$addRowDataGroups("Group")
+    if (type == "Category") {
+      pt$addRowDataGroups("Category", totalCaption = "Subtotal")
+    }
     pt$defineCalculation(calculationGroupName = "calcGrp1",
-                         calculationName = avgCalc, format = "%.0f",
-                         summariseExpression = paste0("sum(Amount", currency, ")/max(Month)"))
-    pt$defineCalculation(calculationName = sumCalc, format = "%.0f",
-                         summariseExpression = paste0("sum(Amount", currency, ")"))
+                         calculationName = unname(dt$calc["Average"]),
+                         format = "%.0f",
+                         summariseExpression = paste0("sum(Amount", dt$ccy,
+                                                      ")/max(Month)"))
+    pt$defineCalculation(calculationName = unname(dt$calc["Sum"]),
+                         format = "%.0f",
+                         summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
     cg1$addCalculationGroups("calcGrp1")
     cg2$addCalculationGroups("default")
   } else {
@@ -68,72 +74,129 @@ create.pivot <- function(dt, type, currency, avgCalc = "AvgCalc",
   return(pt)
 }
 
-format.pivot <- function(pt, type, clrAvg = "#feffba", clrGrp = "#baffbc",
-                         clrTyp = "#ffbbba", clrDat = "#ffbafe",
-                         xlFormat = "#,##0", avgCalc = "AvgCalc",
-                         sumCalc = "SumCalc", verbose = F) {
+format.pivot <- function(dt, pt, type, verbose = F) {
   # Format pivot table
   #
   # Args:
+  #   dt: list of data.tables
+  #     $format: formatting parameters
+  #     $calc: calculation names
   #   pt: pivot report object
-  #   type: pivot report type:
-  #     - "category": pivot report for categories
-  #   clrAvg: background color for average column
-  #   clrGrp: background color for category group total
-  #   clrTyp: background color for category type total
-  #   clrYr: background color for year summary
-  #   avgCalc: average calculation name
-  #   sumCalc: sum calculation name
-  #   xlFormat: Excel format
+  #   type: pivot report type
   #   verbose: print additional information
   #
   # Returns:
   #   pt: pivot report object
   if (verbose) cat(paste0("Format '", type, "' pivot table\n"))
-  # average values
-  cells <- pt$findCells(calculationName = avgCalc, variableValues = list("Category2" = "!*"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrAvg, "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = avgCalc, variableValues = list("Category2" = "**", "Group2" = "!*"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrAvg, "font-weight" = "bold", "font-style" = "italic", "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = avgCalc, variableValues = list("Group2" = "**", "Type" = "!*"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrGrp, "font-weight" = "bold", "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = avgCalc, variableValues = list("Group2" = "**", "Type" = "**"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrTyp, "font-weight" = "bold", "xl-value-format" = xlFormat))
-  # sums
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Category2" = "!*", "Date2" = "!*"))
-  pt$setStyling(cells = cells, declarations = list("xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Category2" = "**", "Group2" = "!*", "Date2" = "!*"))
-  pt$setStyling(cells = cells, declarations = list("font-weight" = "bold", "font-style" = "italic", "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Group2" = "**", "Type" = "!*", "Date2" = "!*"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrGrp, "font-weight" = "bold", "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Group2" = "**", "Type" = "**", "Date2" = "!*"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrTyp, "font-weight" = "bold", "xl-value-format" = xlFormat))
-  # year sums
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Category2" = "!*", "Date2" = "**"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrDat, "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Category2" = "**", "Group2" = "!*", "Date2" = "**"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrDat, "font-weight" = "bold", "font-style" = "italic", "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Group2" = "**", "Type" = "!*", "Date2" = "**"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrGrp, "font-weight" = "bold", "xl-value-format" = xlFormat))
-  cells <- pt$findCells(calculationName = sumCalc, variableValues = list("Group2" = "**", "Type" = "**", "Date2" = "**"))
-  pt$setStyling(cells = cells, declarations = list("background-color" = clrTyp, "font-weight" = "bold", "xl-value-format" = xlFormat))
+  dt$format <- dt$format[, `background-color` :=
+                           sapply(`background-color`, function(x) {
+                             dt$colors[x]})]
+  df <- dt$format[PivotType == type]
+  if (nrow(df) == 0) {
+    cat("Unknown type:", type)
+    stop()
+  }
+  for (i in 1:nrow(df)) {
+    calcName <- dt$calc[df[i, Calculation]]
+    
+    row <- df[i, colSums(is.na(df[i])) == 0, with = FALSE]
+    values <- row[, colnames(row) %in% c("Group",
+                                     "Category",
+                                     "Type",
+                                     "Date"), with = FALSE]
+    valList <- apply(values, 1, as.list)[[1]]
+    format <- row[, colnames(row) %in% c("background-color",
+                                     "font-weight",
+                                     "font-style",
+                                     "xl-value-format"), with = FALSE]
+    formatList <- apply(format, 1, as.list)[[1]]
+    cells <- pt$findCells(calculationNames = calcName, variableValues = valList)
+    pt$setStyling(cells = cells, declarations = formatList)
+  }
   return(pt)
 }
 
-export.pivot <- function(pt, file, sheet, verbose = F) {
+export.pivot <- function(dt, pt, type, ccy, verbose = F) {
   # Export pivot table
   #
   # Args:
+  #   dt: list of data tables
+  #     $wb: Excel workbook object
   #   pt: pivot report object
-  #   file: output file name
-  #   sheet: sheet name
+  #   type: pivot report type:
+  #   ccy: currency
   #   verbose: print additional information
-  if (verbose) cat(paste0("Export pivot table\n"))
-  wb <- createWorkbook(creator = Sys.getenv("USERNAME"))
-  addWorksheet(wb, sheet)
-  pt$writeToExcelWorksheet(wb = wb, wsName = sheet, 
-                           topRowNumber = 1, leftMostColumnNumber=1,
+  #
+  # Returns:
+  #   wb: Excel workbook
+  if (verbose) cat(paste0("Export '", type, "' pivot table\n"))
+  sheet <- paste0(type, ccy)
+  addWorksheet(dt$wb, sheet)
+  pt$writeToExcelWorksheet(wb = dt$wb, wsName = sheet, 
+                           topRowNumber = 1, leftMostColumnNumber = 1,
                            applyStyles = TRUE,
                            mapStylesFromCSS = TRUE)
-  saveWorkbook(wb, file = file, overwrite = TRUE)
+  return(dt$wb)
 }
+
+get.fileName <- function(dt, addTimeStamp = F) {
+  # Get file name
+  #
+  # Args:
+  #   dt: list of data tables
+  #     $folder: folder name
+  #     $year: year
+  #     $ccy: currency
+  #   addTimeStamp: add time stamp to output file name
+  #
+  # Returns:
+  #   fn: file name
+  if (addTimeStamp) {
+    time <- mgsub(c(" ",":"), c("_","."), as.POSIXlt(Sys.time()))
+    fn <- paste0(dt$folder, "output_", dt$year,"_", dt$ccy, "_", time, ".xlsx")
+  } else {
+    fn <- paste0(dt$folder, "output.xlsx")
+  }
+  return(fn)
+}
+
+modify.dt <- function(dt, ccy, folder) {
+  # Modify transactions
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: year name
+  #     $income: income categories
+  #     $year: year
+  #   ccy: currency
+  #   folder: output folder name
+  #
+  # Returns:
+  #   dt: list of data.tables
+  #     $all: all transactions with adjustment
+  #     $calc: calculation names
+  dt$all <- merge(dt$all, dt$income, by = "Category", all.x = T)
+  dt$all$DateOld <- dt$all$Date
+  dt$all$GroupOld <- dt$all$Group
+  dt$all$CategoryOld <- dt$all$Category
+  dt$all <- dt$all[, Date := make_date(year = dt$year, month = Month, day = 1L)]
+  dt$all <- dt$all[, Group := sapply(Group, function(x) {
+    strsplit(x, " - ")[[1]][1]
+  })]
+  dt$all <- dt$all[, Category := sapply(Category, function(x) {
+    sub("^[A-Z]*-", "", x)
+  })]
+  dt$all$Average <- "Monthly"
+  dt$calc <- c("Average" = "AvgCalc", "Sum" = "SumCalc")
+  dt$ccy <- ccy
+  dt$folder <- folder
+  return(dt)
+}
+
+
+load("finance.Rdata")
+dt$all <- dt$all[1:100]
+dt$format <- read.dt("input.xlsx", sheet = "format")
+col <- read.dt("input.xlsx", sheet = "colors")
+dt$colors <- setNames(col$Hex, col$Name)
+export.all(dt, folder = "output/", ccy = "USD", addTimeStamp = T, verbose = T)
