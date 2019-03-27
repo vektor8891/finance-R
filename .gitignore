@@ -1,6 +1,7 @@
 input.xlsx
 output.xlsx
 reports/
+output/
 .Rproj.user/
 .RData
 .Rhistory

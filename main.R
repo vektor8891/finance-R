@@ -12,8 +12,8 @@ source("read.R")
 source("check.R")
 source("summary.R")
 
-Rdata <- "finance.Rdata"
-newRun <- T
+Rdata <- "finance.RData"
+newRun <- F
 
 if (newRun) {
   dt <- read.all(fn = "input.xlsx", folder = "reports/", year = 2019, verbose = F)

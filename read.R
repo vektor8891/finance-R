@@ -278,9 +278,6 @@ read.input <- function(fn, verbose = F) {
   dt$target[, TargetHUF := Target * dt$fx[Currency]]
   dt$targetHUF <- setNames(dt$target$TargetHUF, dt$target$Category)
   dt$notes <- read.dt(fn, sheet = "cash_inventory")
-  dt$format <- read.dt(fn, sheet = "format")
-  col <- read.dt(fn, sheet = "colors")
-  dt$colors <- setNames(col$Hex, col$Name)
   return(dt)
 }
 
