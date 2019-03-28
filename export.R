@@ -1,6 +1,7 @@
 library(pivottabler)
 library(lubridate)
 library(openxlsx)
+library(qdap)
 
 theme <- list(
   fontName = "Verdana, Arial",
@@ -24,29 +25,30 @@ export.all <- function(dt, folder, ccy, addTimeStamp = F, verbose = F) {
   #   folder: output folder name
   #   ccy: currency (HUF or USD)
   #   addTimeStamp: add time stamp to output file name
-  #   verbose: print additional information
-  wb <- createWorkbook(creator = Sys.getenv("USERNAME"))
-  addWorksheet(wb, "Transactions")
-  writeData(wb, sheet = "Transactions", dt$all)
+  #   verbose: print additional information7
   dt <- modify.dt(dt, ccy, folder)
   fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
-  pt <- pivot.category(dt)
-  wb <- export.pt(wb, pt = pt, sheet = paste0("Cat_", ccy), verbose = verbose)
-  pt <- pivot.category(dt, groupOnly = T)
+  wb <- openxlsx::createWorkbook(creator = Sys.getenv("USERNAME"))
+  pt <- pivot.income(dt, showRatio = T)
   wb <- export.pt(wb, pt = pt, sheet = paste0("Grp_", ccy), verbose = verbose)
-  # pt$renderPivot()
-  saveWorkbook(wb, file = fn, overwrite = T)
+  pt <- pivot.income(dt, showCategory = T, showPnL = T)
+  wb <- export.pt(wb, pt = pt, sheet = paste0("Cat_", ccy), verbose = verbose)
+  openxlsx::addWorksheet(wb, "Transactions")
+  openxlsx::writeData(wb, sheet = "Transactions", dt$transactions)  
+  openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
 }
 
-pivot.category <- function(dt, groupOnly = F) {
-  # Create pivot table for categories/groups
+pivot.income <- function(dt, showCategory = F, showPnL = F, showRatio = F) {
+  # Create pivot table for income statement
   #
   # Args:
   #   dt: list of data.tables
   #     $all: all transactions
   #     $year: year name
   #     $ccy: currency (HUF or USD)
-  #   groupOnly: show only category groups in pivot
+  #   showCategory: show category groups in pivot
+  #   showPnL: show total PnL
+  #   showRatio: show absolute ratio compared to total income
   #
   # Returns:
   #   pt: pivot report object
@@ -54,15 +56,29 @@ pivot.category <- function(dt, groupOnly = F) {
   pt$addData(dt$all)
   pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"),
                     totalCaption = as.character(dt$year))
-  pt$addRowDataGroups("Type", totalCaption = "TOTAL")
+  if (showPnL) {
+    pt$addRowDataGroups("Type", totalCaption = "TOTAL")
+  } else {
+    pt$addRowDataGroups("Type", addTotal = F)
+  }
   pt$addRowDataGroups("Group",
                       styleDeclarations = list("xl-min-column-width" = "15"))
-  if (!groupOnly) {
+  if (showCategory) {
     pt$addRowDataGroups("Category", addTotal = FALSE,
                         styleDeclarations = list("xl-min-column-width" = "17"))
   }
-  pt$defineCalculation(calculationName = "monthlySum", format = "%.0f",
-                       summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
+  pt$defineCalculation(calculationName = "MonthlySum", caption = dt$ccy, format = "%.0f",
+                       summariseExpression = paste0("abs(sum(Amount", dt$ccy, "))"))
+  if (showRatio) {
+    incomeFilter <- PivotFilterOverrides$new(pt, keepOnlyFiltersFor = "Date")
+    incomeFilter$add(variableName = "Type", values = "INCOME", action = "replace")
+    pt$defineCalculation(calculationName = "TotalIncome",
+                         summariseExpression = paste0("sum(Amount", dt$ccy, ")"),
+                         filters = incomeFilter, visible = F)
+    pt$defineCalculation(calculationName = "Ratio", caption = "%", type = "calculation",
+                         basedOn = c("TotalIncome", "MonthlySum"), format = "%.0f",
+                         calculationExpression = "abs(values$MonthlySum/values$TotalIncome * 100)")
+  }
   pt$evaluatePivot()
   return(pt)
 }
@@ -126,6 +142,7 @@ modify.dt <- function(dt, ccy, folder) {
   #   dt: list of data.tables
   #     $all: all transactions with adjustment
   #     $calc: calculation names
+  dt$transactions <- dt$all
   dt$all <- merge(dt$all, dt$income, by = "Category", all.x = T)
   dt$all$DateOld <- dt$all$Date
   dt$all$GroupOld <- dt$all$Group
@@ -146,5 +163,5 @@ modify.dt <- function(dt, ccy, folder) {
 
 
 load("finance.RData")
-dt$all <- dt$all[1:100]
+dt$all <- dt$all
 export.all(dt, folder = "output/", ccy = "USD", addTimeStamp = T, verbose = T)
