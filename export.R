@@ -11,8 +11,22 @@ theme <- list(
   cellColor = "rgb(0, 0, 0)",
   totalBackgroundColor = "rgb(186, 202, 233)",
   totalColor = "rgb(0, 0, 0)",
-  borderColor = "rgb(48, 84, 150)"
+  borderColor = "rgb(48, 84, 150)",
+  "xl-value-format" = "#,##0" # TODO: fix format for Excel output
 )
+
+cumulativeFilter <- function(pt, filters, cell) {
+  # get the date filter
+  filter <- filters$getFilter("Date")
+  # get the date value and modify the filter
+  if (is.null(filter) || (filter$type == "ALL") || (length(filter$values) > 1)) {
+    # do nothing
+  } else {
+    date <- filter$values
+    newDates <- seq(as.Date(paste0(dt$year, "-01-01")), date, by = "days")
+    filter$values <- newDates
+  }
+}
 
 export.all <- function(dt, folder, ccy, addTimeStamp = F, verbose = F) {
   # Export results
@@ -25,20 +39,56 @@ export.all <- function(dt, folder, ccy, addTimeStamp = F, verbose = F) {
   #   folder: output folder name
   #   ccy: currency (HUF or USD)
   #   addTimeStamp: add time stamp to output file name
-  #   verbose: print additional information7
+  #   verbose: print additional information
   dt <- modify.dt(dt, ccy, folder)
   fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
   wb <- openxlsx::createWorkbook(creator = Sys.getenv("USERNAME"))
-  pt <- pivot.income(dt, showRatio = T)
-  wb <- export.pt(wb, pt = pt, sheet = paste0("Grp_", ccy), verbose = verbose)
-  pt <- pivot.income(dt, showCategory = T, showPnL = T)
-  wb <- export.pt(wb, pt = pt, sheet = paste0("Cat_", ccy), verbose = verbose)
-  openxlsx::addWorksheet(wb, "Transactions")
-  openxlsx::writeData(wb, sheet = "Transactions", dt$transactions)  
+  # wb <- pivot.balance(dt, wb, verbose = verbose)
+  wb <- pivot.income(dt, wb, showRatio = T, verbose = verbose)
+  # pt <- pivot.income(dt, wb, showCategory = T, showPnL = T, verbose = verbose)
+  # openxlsx::addWorksheet(wb, "Transactions")
+  # openxlsx::writeData(wb, sheet = "Transactions", dt$transactions)
+  # openxlsx::setColWidths(wb, sheet = "Transactions", widths = "auto", cols = 1:10)
   openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
 }
 
-pivot.income <- function(dt, showCategory = F, showPnL = F, showRatio = F) {
+pivot.balance <- function(dt, wb, verbose = F) {
+  # Create pivot table for balance sheet
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: all transactions
+  #     $year: year name
+  #     $ccy: currency (HUF or USD)
+  #   wb: Excel workbook object
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   wb: Excel workbook object
+  pt <- PivotTable$new()
+  dt$all$Date <- as.Date(dt$all$Date)
+  pt$addData(dt$all)
+  pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"),
+                         totalCaption = as.character(dt$year))
+  pt$addRowDataGroups("AccountType", totalCaption = "TOTAL",
+                      styleDeclarations = list("xl-min-column-width" = "13"))
+  pt$addRowDataGroups("AccountGroup",
+                      styleDeclarations = list("xl-min-column-width" = "14"))
+  pt$addRowDataGroups("Account", addTotal = FALSE,
+                      styleDeclarations = list("xl-min-column-width" = "18"))
+  filterOverrides <- PivotFilterOverrides$new(pt, overrideFunction = cumulativeFilter)
+  pt$defineCalculation(calculationName = "MonthlyCumulativeSum", caption = dt$ccy,
+                       filters = filterOverrides, format = "%.0f",
+                       summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
+  pt$evaluatePivot()
+  sheetName <- paste0("Bal_", dt$ccy)
+  wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
+  return(wb)
+}
+
+
+pivot.income <- function(dt, wb, showCategory = F, showPnL = F, showRatio = F,
+                         verbose = F) {
   # Create pivot table for income statement
   #
   # Args:
@@ -46,41 +96,51 @@ pivot.income <- function(dt, showCategory = F, showPnL = F, showRatio = F) {
   #     $all: all transactions
   #     $year: year name
   #     $ccy: currency (HUF or USD)
+  #   wb: Excel workbook object
   #   showCategory: show category groups in pivot
   #   showPnL: show total PnL
   #   showRatio: show absolute ratio compared to total income
+  #   verbose: print additional information
   #
   # Returns:
-  #   pt: pivot report object
+  #   wb: Excel workbook object
   pt <- PivotTable$new()
-  pt$addData(dt$all)
+  pt$theme <- theme
+  pt$addData(dt$all[CategoryType != "OTHER"])
   pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"),
                     totalCaption = as.character(dt$year))
   if (showPnL) {
-    pt$addRowDataGroups("Type", totalCaption = "TOTAL")
+    pt$addRowDataGroups("CategoryType", totalCaption = "TOTAL")
   } else {
-    pt$addRowDataGroups("Type", addTotal = F)
+    pt$addRowDataGroups("CategoryType", addTotal = F)
   }
-  pt$addRowDataGroups("Group",
+  pt$addRowDataGroups("CategoryGroup",
                       styleDeclarations = list("xl-min-column-width" = "15"))
   if (showCategory) {
     pt$addRowDataGroups("Category", addTotal = FALSE,
                         styleDeclarations = list("xl-min-column-width" = "17"))
   }
   pt$defineCalculation(calculationName = "MonthlySum", caption = dt$ccy, format = "%.0f",
-                       summariseExpression = paste0("abs(sum(Amount", dt$ccy, "))"))
+                       summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
   if (showRatio) {
     incomeFilter <- PivotFilterOverrides$new(pt, keepOnlyFiltersFor = "Date")
-    incomeFilter$add(variableName = "Type", values = "INCOME", action = "replace")
+    incomeFilter$add(variableName = "CategoryType", values = "INCOME", action = "replace")
     pt$defineCalculation(calculationName = "TotalIncome",
                          summariseExpression = paste0("sum(Amount", dt$ccy, ")"),
                          filters = incomeFilter, visible = F)
     pt$defineCalculation(calculationName = "Ratio", caption = "%", type = "calculation",
                          basedOn = c("TotalIncome", "MonthlySum"), format = "%.0f",
                          calculationExpression = "abs(values$MonthlySum/values$TotalIncome * 100)")
+    pt$evaluatePivot()
+    # TODO: fix styling for Excel output
+    cells <- pt$findCells(calculationNames = "Ratio")
+    pt$setStyling(cells = cells, declarations = list("font-style" = "italic"))
   }
   pt$evaluatePivot()
-  return(pt)
+  sheetName <- ifelse(showCategory, paste0("Cat_", dt$ccy),
+                      paste0("Grp_", dt$ccy))
+  wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
+  return(wb)
 }
 
 export.pt <- function(wb, pt, sheet, verbose = F) {
@@ -97,8 +157,7 @@ export.pt <- function(wb, pt, sheet, verbose = F) {
   #   wb: Excel workbook
   if (verbose) cat(paste0("Export '", sheet, "' to Excel\n"))
   addWorksheet(wb, sheet)
-  # if (style) browser()
-  pt$theme <- theme
+  browser()
   pt$writeToExcelWorksheet(wb = wb, wsName = sheet, 
                            topRowNumber = 1, leftMostColumnNumber = 1,
                            outputValuesAs = "formattedValueAsNumber",
@@ -132,7 +191,7 @@ modify.dt <- function(dt, ccy, folder) {
   #
   # Args:
   #   dt: list of data.tables
-  #     $all: year name
+  #     $all: transactions
   #     $income: income categories
   #     $year: year
   #   ccy: currency
@@ -142,26 +201,75 @@ modify.dt <- function(dt, ccy, folder) {
   #   dt: list of data.tables
   #     $all: all transactions with adjustment
   #     $calc: calculation names
+  # save transactions
+  setcolorder(dt$all, c(colnames(dt$all)[-2], colnames(dt$all)[2]))
   dt$transactions <- dt$all
+  # add extra rows
+  dt <- add.initial.balance(dt)
+  dt <- add.duplicated(dt)
+  # merge transactions with category & account types
   dt$all <- merge(dt$all, dt$income, by = "Category", all.x = T)
+  dt$all <- merge(dt$all, dt$initBalance, by = "Account", all.x = T)
+  # rename columns
   dt$all$DateOld <- dt$all$Date
-  dt$all$GroupOld <- dt$all$Group
+  dt$all$CategoryGroupOld <- dt$all$CategoryGroup
   dt$all$CategoryOld <- dt$all$Category
   dt$all <- dt$all[, Date := make_date(year = dt$year, month = Month, day = 1L)]
-  dt$all <- dt$all[, Group := sapply(Group, function(x) {
+  dt$all <- dt$all[, CategoryGroup := sapply(CategoryGroup, function(x) {
     strsplit(x, " - ")[[1]][1]
   })]
   dt$all <- dt$all[, Category := sapply(Category, function(x) {
     sub("^[A-Z]*-", "", x)
   })]
-  dt$all$Average <- "Monthly"
-  dt$calc <- c("Average" = "AvgCalc", "Sum" = "SumCalc")
+  # add new parameters
   dt$ccy <- ccy
   dt$folder <- folder
   return(dt)
 }
 
+add.initial.balance <- function(dt) {
+  # Add initial balance to transactions
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: transactions
+  #     $initBalance: initial balance
+  #     $year: year
+  #
+  # Returns:
+  #   dt: list of data.tables
+  #     $all: all transactions with initial balance
+  d <- dt$initBalance
+  d[, c("Amount", "AmountHUF", "AmountUSD", "Date", "Currency", "Category",
+        "Details") := list(InitialHUF, InitialHUF, InitialUSD,
+                           paste0(dt$year, ".01.01"), "HUF", "Initial balance",
+                           "Initial balance")]
+  list[d, ] <- finalize(dt, d)
+  dt$all <- merge.dt(dt$all, d, name = "Initial balance")
+  return(dt)
+}
+
+add.duplicated <- function(dt) {
+  # Duplicate transactions where category is separate account
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: transactions
+  #     $year: year
+  #
+  # Returns:
+  #   dt: list of data.tables
+  #     $all: all transactions with initial balance
+  d <- dt$all[Category %in% dt$initBalance$Account]
+  d[, c("Account", "Amount", "AmountHUF", "AmountUSD", "Category", "Details")
+    := list(Category, -Amount, -AmountHUF, -AmountUSD, "Duplicated",
+            "Duplicated (category is separate account)")]
+  list[d, ] <- finalize(dt, d)
+  dt$all <- merge.dt(dt$all, d, name = "Duplicated")
+  return(dt)
+}
 
 load("finance.RData")
-dt$all <- dt$all
+# dt$all <- dt$all[1:100]
 export.all(dt, folder = "output/", ccy = "USD", addTimeStamp = T, verbose = T)
+# export.all(dt, folder = "output/", ccy = "HUF", addTimeStamp = T, verbose = T)

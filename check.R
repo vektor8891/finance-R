@@ -204,6 +204,7 @@ check.missing.category <- function(dt, strictMode = T, verbose = F) {
   } else {
     if (verbose) cat("FAIL: missing cagegories found:\n")
     print(dtMissing)
+    View(dtMissing)
     if (strictMode) stop()
   }
 }
@@ -222,6 +223,7 @@ check.patterns <- function(dt, strictMode = T, verbose = F) {
   if (nrow(unused) > 0) {
     if (verbose) cat("FAIL: unused patterns found:\n")
     print(unused)
+    View(unused)
     if (strictMode) stop()
   } else {
     if (verbose) cat("PASS: no unused patterns found\n")

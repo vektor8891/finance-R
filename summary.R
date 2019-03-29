@@ -30,12 +30,12 @@ add.extra.rows <- function(dt) {
   # Returns:
   #   dt: list of data.tables
   #     $all: transactions with extra rows
-  cat <- dt$income[Account == "Y"]
+  cat <- dt$income[IsAccount == "Y"]
   for (i in 1:nrow(cat)) {
     d <- dt$all[Category == cat[i, Category]]
     dt$all[Category == cat[i, Category], Category := cat[i, Replace]]
     setkeyv(dt$all, cols = colnames(dt$all))
-    d$Account <- cat[i, Account]
+    d$Account <- cat[i, Category]
     d$Category <- cat[i, Replace]
     d$Amount <- d$Amount * -1
     d$AmountHUF <- d$AmountHUF * -1
