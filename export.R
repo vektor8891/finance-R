@@ -1,4 +1,5 @@
 library(pivottabler)
+library(data.table)
 library(lubridate)
 library(openxlsx)
 library(qdap)
@@ -43,16 +44,36 @@ export.all <- function(dt, folder, ccy, addTimeStamp = F, verbose = F) {
   dt <- modify.dt(dt, ccy, folder)
   fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
   wb <- openxlsx::createWorkbook(creator = Sys.getenv("USERNAME"))
-  # wb <- pivot.balance(dt, wb, verbose = verbose)
+  
   wb <- pivot.income(dt, wb, showRatio = T, verbose = verbose)
-  # pt <- pivot.income(dt, wb, showCategory = T, showPnL = T, verbose = verbose)
-  # openxlsx::addWorksheet(wb, "Transactions")
-  # openxlsx::writeData(wb, sheet = "Transactions", dt$transactions)
-  # openxlsx::setColWidths(wb, sheet = "Transactions", widths = "auto", cols = 1:10)
+  wb <- pivot.income(dt, wb, showCategory = T, showPnL = T, verbose = verbose)
+  wb <- pivot.balance(dt, wb, verbose = verbose)
+  wb <- pivot.balance(dt, wb, cumulative = F, verbose = verbose)
+  wb <- export.dt(dt$transactions, wb, "Transactions", verbose = verbose)
+  
   openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
 }
 
-pivot.balance <- function(dt, wb, verbose = F) {
+export.dt <- function(dt, wb, sheetName, verbose = F) {
+  # Export results
+  #
+  # Args:
+  #   dt: data.table to export
+  #   wb: Excel workbook object
+  #   sheetName: sheet name
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   wb: Excel workbook object
+  if (verbose) cat(paste0("Export '", sheetName, "' to Excel\n"))
+  openxlsx::addWorksheet(wb, sheetName)
+  openxlsx::writeData(wb, sheet = sheetName, dt)
+  openxlsx::setColWidths(wb, sheet = sheetName, widths = "auto",
+                         cols = 1:length(colnames(dt)))
+  return(wb)
+}
+
+pivot.balance <- function(dt, wb, cumulative = T ,verbose = F) {
   # Create pivot table for balance sheet
   #
   # Args:
@@ -61,11 +82,13 @@ pivot.balance <- function(dt, wb, verbose = F) {
   #     $year: year name
   #     $ccy: currency (HUF or USD)
   #   wb: Excel workbook object
+  #   cumulative: use cumulative sum
   #   verbose: print additional information
   #
   # Returns:
   #   wb: Excel workbook object
   pt <- PivotTable$new()
+  pt$theme <- theme
   dt$all$Date <- as.Date(dt$all$Date)
   pt$addData(dt$all)
   pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"),
@@ -76,12 +99,22 @@ pivot.balance <- function(dt, wb, verbose = F) {
                       styleDeclarations = list("xl-min-column-width" = "14"))
   pt$addRowDataGroups("Account", addTotal = FALSE,
                       styleDeclarations = list("xl-min-column-width" = "18"))
-  filterOverrides <- PivotFilterOverrides$new(pt, overrideFunction = cumulativeFilter)
-  pt$defineCalculation(calculationName = "MonthlyCumulativeSum", caption = dt$ccy,
-                       filters = filterOverrides, format = "%.0f",
-                       summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
+  if (cumulative) {
+    filterOverrides <- PivotFilterOverrides$new(pt, overrideFunction =
+                                                  cumulativeFilter)
+    pt$defineCalculation(calculationName = "MonthlyCumulativeSum", format = "%.0f",
+                         caption = dt$ccy, filters = filterOverrides, 
+                         summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
+  } else {
+    pt$defineCalculation(calculationName = "MonthlySum", caption = dt$ccy,
+                         format = "%.0f", summariseExpression =
+                           paste0("sum(Amount", dt$ccy, ")"))
+  }
   pt$evaluatePivot()
-  sheetName <- paste0("Bal_", dt$ccy)
+  cells <- pt$findCells(calculationNames = c("MonthlyCumulativeSum", "MonthlySum"))
+  pt$setStyling(cells = cells, declarations = list("xl-value-format" = "#,##0"))
+  sheetName <- ifelse(cumulative, paste0("BalCum_", dt$ccy),
+                      paste0("Bal_", dt$ccy))
   wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
   return(wb)
 }
@@ -129,14 +162,16 @@ pivot.income <- function(dt, wb, showCategory = F, showPnL = F, showRatio = F,
                          summariseExpression = paste0("sum(Amount", dt$ccy, ")"),
                          filters = incomeFilter, visible = F)
     pt$defineCalculation(calculationName = "Ratio", caption = "%", type = "calculation",
-                         basedOn = c("TotalIncome", "MonthlySum"), format = "%.0f",
+                         basedOn = c("TotalIncome", "MonthlySum"), format = "%.0f %%",
                          calculationExpression = "abs(values$MonthlySum/values$TotalIncome * 100)")
-    pt$evaluatePivot()
-    # TODO: fix styling for Excel output
+  }
+  pt$evaluatePivot()
+  if (showRatio) {
     cells <- pt$findCells(calculationNames = "Ratio")
     pt$setStyling(cells = cells, declarations = list("font-style" = "italic"))
   }
-  pt$evaluatePivot()
+  cells <- pt$findCells(calculationNames = "MonthlySum")
+  pt$setStyling(cells = cells, declarations = list("xl-value-format" = "#,##0"))
   sheetName <- ifelse(showCategory, paste0("Cat_", dt$ccy),
                       paste0("Grp_", dt$ccy))
   wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
@@ -149,15 +184,13 @@ export.pt <- function(wb, pt, sheet, verbose = F) {
   # Args:
   #   wb: Excel workbook object
   #   pt: pivot report object
-  #   type: pivot report type:
-  #   ccy: currency
+  #   sheet: sheet name
   #   verbose: print additional information
   #
   # Returns:
   #   wb: Excel workbook
   if (verbose) cat(paste0("Export '", sheet, "' to Excel\n"))
   addWorksheet(wb, sheet)
-  browser()
   pt$writeToExcelWorksheet(wb = wb, wsName = sheet, 
                            topRowNumber = 1, leftMostColumnNumber = 1,
                            outputValuesAs = "formattedValueAsNumber",
