@@ -58,11 +58,11 @@ add.columns <- function(d, type = "normal", negate = FALSE) {
     dtTransfer[, Credit := CreditFinal - Credit]
     d <- merge.dt(d, dtTransfer)
     d[, Amount := Credit + Debit]
-  } else if (type == "53_checking") {
+  } else if (grepl("53", type)) {
     names(d) <- "Details"
     d[, Date := paste0(2019, ".", gsub("/", ".", substr(Details, 1, 5)))]
     d[, Amount := sapply(Details, function(x) {
-      as.numeric(strsplit(x, " ")[[1]][2])
+      as.numeric(gsub(",", "", strsplit(x, " ")[[1]][2]))
     })]
     if (negate) d$Amount <- d$Amount * -1
   } else if (type == "capital_one") {
@@ -72,6 +72,15 @@ add.columns <- function(d, type = "normal", negate = FALSE) {
       format(as.POSIXct(x, format = "%m/%d/%Y"), format = "%Y.%m.%d")
     })]
     d[, Category := NULL]
+  } else if (grepl("HSBC", type)) {
+    # browser()
+    d[, Date := sapply(DateRaw, function(x) {
+      format(as.POSIXct(x, format = "%m/%d/%Y"), format = "%Y.%m.%d")
+    })]
+    d[, Amount := as.numeric(sub(",", "", AmountRaw))]
+    if (type == "HSBC_mastercard") {
+      d$Amount <- -d$Amount
+    }
   } else if (type == "adjust") {
     d[, Amount := Adjustment]
     d[, Details := "Adjustment"]
@@ -217,7 +226,7 @@ read.dt <- function(fn, sheet) {
 }
 
 read.file <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
-                      sep = "auto", skip = 1, na = NULL, verbose = F) {
+                      sep = "auto", header = T, verbose = F) {
   # Read data from file
   #
   # Args:
@@ -225,27 +234,24 @@ read.file <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
   #   dec: decimal places
   #   encoding: file encoding
   #   sep: separator between columns
-  #   skip: number of lines to skip
-  #   na: replacement for NA strings
+  #   header: if FALSE then no header
   #   verbose: print additional information
   #
   # Returns:
   #   d: data.table
-  if (is.na(skip)) skip <- 0
   if (is.na(sep)) sep <- "auto"
   if (folder != "") fn <- paste0(folder, fn)
   if (file.exists(fn)) {
     fileType <- unlist(strsplit(fn, "[.]"))[2]
     if (fileType == "csv") {
-      d <- fread(fn, dec = dec, encoding = encoding, sep = sep)
+      hdr <- ifelse(is.null(header), "auto", as.logical(header))
+      d <- fread(fn, dec = dec, encoding = encoding, sep = sep, header = hdr)
     } else if (fileType %in% c("xlsx", "xls")) {
-      d <- as.data.table(xlsx::read.xlsx(fn, 1, encoding = encoding,
-                                         startRow = skip + 1))
+      d <- as.data.table(xlsx::read.xlsx(fn, 1, encoding = encoding))
     } else {
       cat("Unknown filetype:", fileType, "in", fn, "\n")
       stop()
     }
-    if (!is.null(na)) d[is.na(d)] <- na
     if (verbose) cat(dim(dt)[[1]], "rows imported from:", fn, "\n")
     return(d)
   } else {
@@ -254,17 +260,17 @@ read.file <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
   }
 }
 
-read.input <- function(fn, verbose = F) {
+read.input <- function(dt, fn, verbose = F) {
   # Read input data
   #
   # Args:
+  #   dt: (empty) list of data.tables
   #   fn: file name
   #   verbose: print additional information
   #
   # Returns:
   #   dt: list of data.tables
   if (verbose) cat("Read input:", fn, "\n")
-  dt <- list()
   dt$rules <- read.dt(fn, sheet = "rename_rules")
   dt$income <- read.dt(fn, sheet = "income_categories")
   dt$patterns <- read.dt(fn, sheet = "patterns")
@@ -295,10 +301,11 @@ read.report <- function(dt, file, type = "normal", verbose = F) {
   #   dt: list of data.tables
   #     $all: all transactions
   #     $patterns: patterns with updated math results
+  print(file)
   rep <- dt$reportTypes[Type == type]
-  d <- read.file(file, folder = dt$folderReports, skip = rep$Skip,
-                 sep = rep$Separator, verbose = verbose)
-  d <- rename(d, type, dt$rules, verbose = verbose)
+  d <- read.file(file, folder = dt$folderReports, sep = rep$Separator,
+                 header = rep$Header, verbose = verbose)
+  d <- rename.dt(d, type, dt$rules, verbose = verbose)
   negate <- grepl("debit", tolower(file))
   d <- add.columns(d, type, negate)
   if (!is.na(rep$Currency)) d$Currency <- rep$Currency
@@ -319,7 +326,8 @@ read.all <- function(fn, folder, year, verbose = F) {
   #
   # Returns:
   #   dt: list of data.tables
-  dt <- read.input(fn = fn, verbose = verbose)
+  dt <- list()
+  dt <- read.input(dt, fn = fn, verbose = verbose)
   dt$all <- data.table()
   dt$folderReports <- folder
   dt$year <- year
@@ -333,7 +341,7 @@ read.all <- function(fn, folder, year, verbose = F) {
   return(dt)
 }
 
-rename <- function(d, type, rules, verbose = F) {
+rename.dt <- function(d, type, rules, verbose = F) {
   # Rename values in data.table
   #
   # Args:

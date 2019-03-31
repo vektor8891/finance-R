@@ -4,5 +4,6 @@ reports/
 output/
 .Rproj.user/
 .RData
+.Rdata
 .Rhistory
 .Rproj.user

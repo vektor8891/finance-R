@@ -14,6 +14,8 @@ check.all <- function(dt, showPairs = F, strictMode = T, verbose = F) {
   check.balance(dt, strictMode = strictMode, verbose = verbose)
   check.category.target(dt, strictMode = strictMode, verbose = verbose)
   check.duplicates(dt, strictMode = strictMode, verbose = verbose)
+  check.latest(dt, strictMode = strictMode, verbose = verbose)
+  check.frequency(dt, strictMode = strictMode, verbose = verbose)
 }
 
 check.balance <- function(dt, strictMode = T, verbose = F) {
@@ -93,6 +95,7 @@ check.cash <- function(dt, strictMode = T, verbose = F) {
   transHUF <- sum(dt$all[Account == "Cash", AmountHUF])
   currentHUF <- initialHUF + transHUF
   diffHUF <- currentHUF - notesHUF
+  adjustNewHUF <- round(adjustHUF - diffHUF, 2)
   if (abs(diffHUF) > 0.01) {
     cat("WARNING: Mismatch between notes and cash transactions!\n",
         "A. Initial:\t\tHUF ", initialHUF, "\n",
@@ -101,8 +104,8 @@ check.cash <- function(dt, strictMode = T, verbose = F) {
         "D. Notes:\t\tHUF ", notesHUF, "\n",
         "------------------------------------\n",
         "G. DIFFERENCE (D-C):\tHUF ", diffHUF, "\n",
-        "HINT: to dismiss error change initial cash adjustment to HUF",
-        diffHUF,"(E+G)\n")
+        "HINT: to dismiss error set initial cash adjustment to HUF",
+        adjustNewHUF,"(E+G)\n")
     if (strictMode) stop()
   } else if (verbose) cat("PASS: Notes and cash transations match (adjustment:",
                           adjustHUF, "HUF)\n")
@@ -133,6 +136,8 @@ check.category.target <- function(dt,  showPairs = F, strictMode = T,
       cat(paste0("WARNING: sum(", catName, ") != ", targetHUF, " HUF!\n",
                  "HINT: to dismiss error set target to ",
                  round(catSumHUF, 2), " HUF\n"))
+      View(dtCat)
+      browser()
       if (strictMode) stop()
     } else if (verbose) {
       cat(paste0("PASS: sum(", catName, ") = ", targetHUF, " HUF\n"))
@@ -195,14 +200,11 @@ check.missing.category <- function(dt, strictMode = T, verbose = F) {
   #   dt: data.tables for transactions
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  #
-  # Returns:
-  #   dt: data.table without duplicates
   dtMissing <- setorder(dt, Category)[is.na(Category)]
   if (nrow(dtMissing) == 0) {
     if (verbose) cat("PASS: no missing categories found\n")
   } else {
-    if (verbose) cat("FAIL: missing cagegories found:\n")
+    if (verbose) cat("FAIL: missing categories found:\n")
     print(dtMissing)
     View(dtMissing)
     if (strictMode) stop()
@@ -230,6 +232,64 @@ check.patterns <- function(dt, strictMode = T, verbose = F) {
   }
 }
 
+check.latest <- function(dt, strictMode = T, verbose = F) {
+  # Check if latest transaction for account is before threshold
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: transactions
+  #     $initBalance: initial balance values
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
+  #   verbose: print additional information
+  dtThreshold <- dt$initBalance[!is.na(NoTransactionAfter)]
+  for (row in 1:nrow(dtThreshold)) {
+    account <- dtThreshold[row, Account]
+    dtAcc <- dt$all[Account == account]
+    latest <- ifelse(nrow(dtAcc) > 0, max(dtAcc$Date), paste0(dt$year, ".01.01"))
+    threshold <- dtThreshold[row, NoTransactionAfter]
+    if (as.Date(latest, format = "%Y.%m.%d") >
+        as.Date(threshold, format = "%Y.%m.%d")) {
+      if (verbose) cat("FAIL:", account, ":", latest, "(latest) >",
+                       threshold, "\n")
+      if (strictMode) stop()
+    } else {
+      if (verbose) cat("PASS:", account, ":", latest, "(latest) <=",
+                       threshold, "\n")    }
+  }
+}
+
+check.frequency <- function(dt, strictMode = T, verbose = F) {
+  # Check if transactions have been updated for account
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: transactions
+  #   strictMode: if check fails throws error if TRUE and warning if FALSE
+  #   verbose: print additional information
+  #
+  # Returns:
+  #   dt: data.table without duplicates
+  dtFreq <- dt$initBalance[!is.na(UpdateFrequencyDays)]
+  for (row in 1:nrow(dtFreq)) {
+    account <- dtFreq[row, Account]
+    dtAcc <- dt$all[Account == account]
+    latest <- ifelse(nrow(dtAcc) > 0, max(dtAcc$Date), paste0(dt$year, ".01.01"))
+    freq <- dtFreq[row, UpdateFrequencyDays]
+    diff <- as.numeric(difftime(Sys.Date(),
+                                as.Date(latest, format = "%Y.%m.%d"),
+                                units = "days"))
+    freqDays <- dtFreq[1, UpdateFrequencyDays]
+    if (diff > freq) {
+      if (verbose) cat("FAIL:", account, "latest update", diff, "days ago >",
+                       freq, "\n")
+      if (strictMode) stop()
+    } else {
+      if (verbose) {
+        cat("PASS:", account, "latest update", diff, "days ago <=", freq, "\n")
+      }
+    }
+  }
+}
 
 find.pairs <- function(dt, days = 7, verbose = F) {
   # Find transation with same amount within date range
