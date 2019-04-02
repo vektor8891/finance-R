@@ -29,7 +29,7 @@ cumulativeFilter <- function(pt, filters, cell) {
   }
 }
 
-export.all <- function(dt, folder, ccy, addTimeStamp = F, verbose = F) {
+export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   # Export results
   #
   # Args:
@@ -41,14 +41,13 @@ export.all <- function(dt, folder, ccy, addTimeStamp = F, verbose = F) {
   #   ccy: currency (HUF or USD)
   #   addTimeStamp: add time stamp to output file name
   #   verbose: print additional information
-  dt <- modify.dt(dt, ccy, folder)
+  dt <- modify.dt(dt, currency, folder)
   fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
   wb <- openxlsx::createWorkbook(creator = Sys.getenv("USERNAME"))
   
   wb <- pivot.income(dt, wb, showRatio = T, verbose = verbose)
   wb <- pivot.income(dt, wb, showCategory = T, showPnL = T, verbose = verbose)
   wb <- pivot.balance(dt, wb, verbose = verbose)
-  wb <- pivot.balance(dt, wb, cumulative = F, verbose = verbose)
   wb <- export.dt(dt$transactions, wb, "Transactions", verbose = verbose)
   
   openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
@@ -99,22 +98,15 @@ pivot.balance <- function(dt, wb, cumulative = T ,verbose = F) {
                       styleDeclarations = list("xl-min-column-width" = "14"))
   pt$addRowDataGroups("Account", addTotal = FALSE,
                       styleDeclarations = list("xl-min-column-width" = "18"))
-  if (cumulative) {
-    filterOverrides <- PivotFilterOverrides$new(pt, overrideFunction =
-                                                  cumulativeFilter)
-    pt$defineCalculation(calculationName = "MonthlyCumulativeSum", format = "%.0f",
-                         caption = dt$ccy, filters = filterOverrides, 
-                         summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
-  } else {
-    pt$defineCalculation(calculationName = "MonthlySum", caption = dt$ccy,
-                         format = "%.0f", summariseExpression =
-                           paste0("sum(Amount", dt$ccy, ")"))
-  }
+  filterOverrides <- PivotFilterOverrides$new(pt, overrideFunction =
+                                                cumulativeFilter)
+  pt$defineCalculation(calculationName = "MonthlyCumulativeSum", format = "%.0f",
+                       caption = dt$ccy, filters = filterOverrides, 
+                       summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
   pt$evaluatePivot()
   cells <- pt$findCells(calculationNames = c("MonthlyCumulativeSum", "MonthlySum"))
   pt$setStyling(cells = cells, declarations = list("xl-value-format" = "#,##0"))
-  sheetName <- ifelse(cumulative, paste0("BalCum_", dt$ccy),
-                      paste0("Bal_", dt$ccy))
+  sheetName <- paste0("Balance", dt$ccy)
   wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
   return(wb)
 }
@@ -172,8 +164,8 @@ pivot.income <- function(dt, wb, showCategory = F, showPnL = F, showRatio = F,
   }
   cells <- pt$findCells(calculationNames = "MonthlySum")
   pt$setStyling(cells = cells, declarations = list("xl-value-format" = "#,##0"))
-  sheetName <- ifelse(showCategory, paste0("Cat_", dt$ccy),
-                      paste0("Grp_", dt$ccy))
+  sheetName <- ifelse(showCategory, paste0("Category", dt$ccy),
+                      paste0("CategoryGroup", dt$ccy))
   wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
   return(wb)
 }
@@ -301,8 +293,3 @@ add.duplicated <- function(dt) {
   dt$all <- merge.dt(dt$all, d, name = "Duplicated")
   return(dt)
 }
-
-load("finance.RData")
-# dt$all <- dt$all[1:100]
-export.all(dt, folder = "output/", ccy = "USD", addTimeStamp = T, verbose = T)
-# export.all(dt, folder = "output/", ccy = "HUF", addTimeStamp = T, verbose = T)

@@ -11,17 +11,29 @@ Sys.setlocale("LC_TIME", "English")
 source("read.R")
 source("check.R")
 source("summary.R")
+source("export.R")
 
-Rdata <- "finance.RData"
+year <- 2019
+currency <- "USD"
+verbose <- F
+
 newRun <- T
+strictMode <- T
+input <- "input.xlsx"
+reports <- "reports/"
+output <- "output/"
+Rdata <- "finance.RData"
 
 if (newRun) {
-  dt <- read.all(fn = "input.xlsx", folder = "reports/", year = 2019, verbose = F)
+  dt <- read.all(fn = input, folder = reports, year = year, verbose = verbose)
   dt <- summary.all(dt)
-  check.all(dt, showPairs = F, strictMode = T, verbose = T)
+  check.all(dt, showPairs = F, strictMode = strictMode, verbose = T)
   save(dt, file = Rdata)
 } else {
   load(Rdata)
 }
 
-source("export.R")
+load("finance.RData")
+# dt$all <- dt$all[1:100]
+export.all(dt, folder = output, currency = currency, addTimeStamp = T,
+           verbose = verbose)

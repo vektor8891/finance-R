@@ -174,19 +174,21 @@ get.pattern <- function(patternData, detail, verbose = F) {
   return(c(category, pattern))
 }
 
-get.report.type <- function(reports, file) {
+get.report.type <- function(reports, year, file) {
   # Get report type
   #
   # Args:
   #   reports: data.table of report types
   #   file: file name
   #   types: report types
+  #   year: year
   #
   # Returns:
   #   type: type of report
   types <- reports$Type
   for (i in 1:length(types)) {
-    if (grepl(tolower(types[i]), tolower(file), fixed = TRUE)) {
+    if (grepl(tolower(types[i]), tolower(file), fixed = TRUE) &
+        grepl(year, file, fixed = TRUE)) {
       type <- types[i]
       return(type)
     }
@@ -332,7 +334,7 @@ read.all <- function(fn, folder, year, verbose = F) {
   dt$folderReports <- folder
   dt$year <- year
   for (fn in list.files(path = folder)) {
-    type <- get.report.type(dt$reportTypes, fn)
+    type <- get.report.type(dt$reportTypes, year, fn)
     if (!is.null(type)) {
       if (verbose) cat("Read report:", fn, "\n")
       dt <- read.report(dt, fn, type, verbose = verbose)
