@@ -19,13 +19,13 @@ verbose <- F
 
 newRun <- T
 strictMode <- T
-input <- "input.xlsx"
+config <- "config.xlsx"
 reports <- "reports/"
 output <- "output/"
 Rdata <- "finance.RData"
 
 if (newRun) {
-  dt <- read.all(fn = input, folder = reports, year = year, verbose = verbose)
+  dt <- read.all(fn = config, folder = reports, year = year, verbose = verbose)
   dt <- summary.all(dt)
   check.all(dt, showPairs = F, strictMode = strictMode, verbose = T)
   save(dt, file = Rdata)
