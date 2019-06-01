@@ -14,6 +14,7 @@ add.adjustment <- function(dt) {
   d <- dt$monthlyBalance[Adjustment != 0]
   d$Year <- dt$year
   d <- add.columns(d, type = "adjust")
+  d$Amount <- d$Adjustment
   list[d, ] <- finalize(dt, d)
   dt$all <- merge.dt(dt$all, d, "adjust")
   return(dt)

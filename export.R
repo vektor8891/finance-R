@@ -45,12 +45,13 @@ export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
   wb <- openxlsx::createWorkbook(creator = Sys.getenv("USERNAME"))
   
-  wb <- pivot.income(dt, wb, showRatio = T, verbose = verbose)
+  wb <- pivot.income(dt, wb, showRatio = T, showPnL = T, verbose = verbose)
   wb <- pivot.income(dt, wb, showCategory = T, showPnL = T, verbose = verbose)
   wb <- pivot.balance(dt, wb, verbose = verbose)
   wb <- export.dt(dt$transactions, wb, "Transactions", verbose = verbose)
   
   openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
+  cat("Export DONE.")
 }
 
 export.dt <- function(dt, wb, sheetName, verbose = F) {
@@ -90,8 +91,8 @@ pivot.balance <- function(dt, wb, cumulative = T ,verbose = F) {
   pt$theme <- theme
   dt$all$Date <- as.Date(dt$all$Date)
   pt$addData(dt$all)
-  pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"),
-                         totalCaption = as.character(dt$year))
+  pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"), dataSortOrder="desc",
+                         totalCaption = as.character(dt$year), totalPosition = "before")
   pt$addRowDataGroups("AccountType", totalCaption = "TOTAL",
                       styleDeclarations = list("xl-min-column-width" = "13"))
   pt$addRowDataGroups("AccountGroup",
@@ -132,8 +133,8 @@ pivot.income <- function(dt, wb, showCategory = F, showPnL = F, showRatio = F,
   pt <- PivotTable$new()
   pt$theme <- theme
   pt$addData(dt$all[CategoryType != "OTHER"])
-  pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"),
-                    totalCaption = as.character(dt$year))
+  pt$addColumnDataGroups("Date", dataFormat = list(format = "%b"), dataSortOrder="desc",
+                    totalCaption = as.character(dt$year), totalPosition = "before")
   if (showPnL) {
     pt$addRowDataGroups("CategoryType", totalCaption = "TOTAL")
   } else {
@@ -264,7 +265,7 @@ add.initial.balance <- function(dt) {
   # Returns:
   #   dt: list of data.tables
   #     $all: all transactions with initial balance
-  d <- dt$initBalance
+  d <- copy(dt$initBalance)
   d[, c("Amount", "AmountHUF", "AmountUSD", "Date", "Currency", "Category",
         "Details") := list(InitialHUF, InitialHUF, InitialUSD,
                            paste0(dt$year, ".01.01"), "HUF", "Initial balance",
@@ -286,10 +287,12 @@ add.duplicated <- function(dt) {
   #   dt: list of data.tables
   #     $all: all transactions with initial balance
   d <- dt$all[Category %in% dt$initBalance$Account]
-  d[, c("Account", "Amount", "AmountHUF", "AmountUSD", "Category", "Details")
-    := list(Category, -Amount, -AmountHUF, -AmountUSD, "Duplicated",
-            "Duplicated (category is separate account)")]
-  list[d, ] <- finalize(dt, d)
-  dt$all <- merge.dt(dt$all, d, name = "Duplicated")
+  if (nrow(d) > 0) {
+    d[, c("Account", "Amount", "AmountHUF", "AmountUSD", "Category", "Details")
+      := list(Category, -Amount, -AmountHUF, -AmountUSD, "Duplicated",
+              "Duplicated (category is separate account)")]
+    list[d, ] <- finalize(dt, d)
+    dt$all <- merge.dt(dt$all, d, name = "Duplicated")
+  }
   return(dt)
 }

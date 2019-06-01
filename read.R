@@ -24,6 +24,7 @@ add.category <- function(patterns, d, verbose = F) {
       if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
       list[categ, pattern] <- get.pattern(patterns, detail, verbose = verbose)
       if (!is.null(categ)) {
+        #if(is.na(categ)) browser() # missing category
         d[row, Category := categ]
         patterns[Pattern %in% pattern, Match := Match + 1]
         next
@@ -34,13 +35,13 @@ add.category <- function(patterns, d, verbose = F) {
   return(list(d, patterns))
 }
 
-add.columns <- function(d, type = "normal", negate = FALSE) {
+add.columns <- function(d, type = "normal", multiply = FALSE) {
   # Add columns to data.table
   #
   # Args:
   #   d: data.table
   #   type: file type
-  #   negate: negate values
+  #   multiply: multiply values with given number
   #
   # Returns:
   #   d: updated data.table
@@ -64,7 +65,6 @@ add.columns <- function(d, type = "normal", negate = FALSE) {
     d[, Amount := sapply(Details, function(x) {
       as.numeric(gsub(",", "", strsplit(x, " ")[[1]][2]))
     })]
-    if (negate) d$Amount <- d$Amount * -1
   } else if (type == "capital_one") {
     d[is.na(d)] <- 0
     d[, Amount := Credit - Debit]
@@ -78,15 +78,13 @@ add.columns <- function(d, type = "normal", negate = FALSE) {
       format(as.POSIXct(x, format = "%m/%d/%Y"), format = "%Y.%m.%d")
     })]
     d[, Amount := as.numeric(sub(",", "", AmountRaw))]
-    if (type == "HSBC_mastercard") {
-      d$Amount <- -d$Amount
-    }
   } else if (type == "adjust") {
     d[, Amount := Adjustment]
     d[, Details := "Adjustment"]
     d[, Day := ifelse(is.na(Day), 1, Day)]
     d$Date <- sprintf("%4d.%02d.%02d", d$Year, d$Month, d$Day)
   }
+  if (!is.na(multiply)) d$Amount <- d$Amount * multiply
   return(d)
 }
 
@@ -308,8 +306,8 @@ read.report <- function(dt, file, type = "normal", verbose = F) {
   d <- read.file(file, folder = dt$folderReports, sep = rep$Separator,
                  header = rep$Header, verbose = verbose)
   d <- rename.dt(d, type, dt$rules, verbose = verbose)
-  negate <- grepl("debit", tolower(file))
-  d <- add.columns(d, type, negate)
+  multiply <- rep$Multiply
+  d <- add.columns(d, type, multiply)
   if (!is.na(rep$Currency)) d$Currency <- rep$Currency
   if (!is.na(rep$Account)) d$Account <- rep$Account
   list[d, dt$patterns] <- finalize(dt, d)

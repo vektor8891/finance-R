@@ -6,7 +6,10 @@
 # Year: 2019
 # Licence: MIT
 
-Sys.setlocale("LC_TIME", "English")
+# Run all: Ctrl + Alt + R
+# TODO: check monthly balance
+
+Sys.setlocale("LC_TIME", if (.Platform$OS.type == "unix") "C" else "English")
 
 source("read.R")
 source("check.R")
@@ -33,7 +36,6 @@ if (newRun) {
   load(Rdata)
 }
 
-load("finance.RData")
-# dt$all <- dt$all[1:100]
+# dt$all <- dt$all[1:100] # trunk data for testing
 export.all(dt, folder = output, currency = currency, addTimeStamp = T,
            verbose = verbose)

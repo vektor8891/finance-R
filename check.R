@@ -12,7 +12,7 @@ check.all <- function(dt, showPairs = F, strictMode = T, verbose = F) {
   check.patterns(dt$patterns, strictMode = strictMode, verbose = verbose)
   check.cash(dt, strictMode = strictMode, verbose = verbose)
   check.balance(dt, strictMode = strictMode, verbose = verbose)
-  check.category.target(dt, strictMode = strictMode, verbose = verbose)
+  check.category.target(dt, strictMode = F, verbose = verbose)
   check.duplicates(dt, strictMode = strictMode, verbose = verbose)
   check.latest(dt, strictMode = strictMode, verbose = verbose)
   check.frequency(dt, strictMode = strictMode, verbose = verbose)
@@ -42,7 +42,8 @@ check.balance <- function(dt, strictMode = T, verbose = F) {
                           paste0(month, "/", day))
       fx <- dt$fx[ccy]
       adjust <- ifelse(is.na(bal[row, Adjustment]), 0, bal[row, Adjustment])
-      balance <- bal[row, Balance]
+      multiply <- dt$initBalance[Account == account, Multiply]
+      balance <- ifelse(is.na(multiply), bal[row, Balance], bal[row, Balance] * multiply)
       initial <- round(dt$initBalance[Account == account, InitialHUF] / fx, 2)
       trans <- round(sum(dt$all[Account == account & (Month < month
                                                       | (Month == month & Day <= day)), AmountHUF])
@@ -98,14 +99,15 @@ check.cash <- function(dt, strictMode = T, verbose = F) {
   adjustNewHUF <- round(adjustHUF - diffHUF, 2)
   if (abs(diffHUF) > 0.01) {
     cat("WARNING: Mismatch between notes and cash transactions!\n",
-        "A. Initial:\t\tHUF ", initialHUF, "\n",
-        "B. Transactions:\tHUF ", transHUF, "\n",
-        "C. Current (A+B):\tHUF ", currentHUF, "\n",
-        "D. Notes:\t\tHUF ", notesHUF, "\n",
+        "A. Initial:\t\tHUF", initialHUF, "\n",
+        "B. Transactions:\tHUF", transHUF, " - adjustment:", adjustHUF,"\n",
+        "C. Current (A+B):\tHUF", currentHUF, "\n",
+        "D. Notes:\t\tHUF", notesHUF, "\n",
         "------------------------------------\n",
-        "G. DIFFERENCE (D-C):\tHUF ", diffHUF, "\n",
+        "G. DIFFERENCE (D-C):\tHUF", diffHUF, "\n",
         "HINT: to dismiss error set initial cash adjustment to HUF",
         adjustNewHUF,"(E+G)\n")
+    browser()
     if (strictMode) stop()
   } else if (verbose) cat("PASS: Notes and cash transations match (adjustment:",
                           adjustHUF, "HUF)\n")
@@ -131,13 +133,10 @@ check.category.target <- function(dt,  showPairs = F, strictMode = T,
     catSumHUF <- sum(dtCat[, AmountHUF])
     diffHUF <- catSumHUF - targetHUF
     if (abs(diffHUF) > 0.01) {
-      setorder(dtCat[HasPair == FALSE], Date)
-      if (showPairs) print(dtCat) else print(dtCat[HasPair == FALSE])
       cat(paste0("WARNING: sum(", catName, ") != ", targetHUF, " HUF!\n",
                  "HINT: to dismiss error set target to ",
                  round(catSumHUF, 2), " HUF\n"))
       View(dtCat)
-      browser()
       if (strictMode) stop()
     } else if (verbose) {
       cat(paste0("PASS: sum(", catName, ") = ", targetHUF, " HUF\n"))

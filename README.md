@@ -98,6 +98,7 @@ Here you can define different report types which are used to decide how to proce
 	- the report file contains the account name but not as a separate column but as part of another column. In this case the 'Account' column must be calculated using the `add_column()` function.
 - ***Separator***: Optional parameter, only applicable for _*.csv_ files. It is used as a parameter for `fread()`. The default value is `"auto"`.
 - ***Header***: Optional parameter, only applicable for _*.csv_ files. It is used as a parameter for `fread()`. The default value is `"auto"`. If there is no header in the file set `Header` to `0`.
+- ***Multiply***: All values will be multiplied with the number in this column. E.g. if for a debit or mastercard report type the opposite value is reported, you can set `Multiply` to `-1`.
 
 ## rename_rules
 
@@ -156,6 +157,7 @@ In this sheet you can define different accounts and their features (account type
 - ***EUR***: Initial balance in EUD. If the account has different currency, set this to `0`.
 - ***NoTransactionAfter***: Optional parameter. If the account has been decommissioned e.g. on January 4, 2019, you can write `2019.01.04` here and the program will check if this account has no transactions after this date. If there is some, it will give an error.
 - ***UpdateFrequencyDays***: Optional parameter. This can be useful to remind yourself to update the reports for the different accounts regularly. E.g. if you want to update transactions for an account in every 30 days, you can put `30` here and the program will check if the latest transaction on this account is no older than 30 days. If it is older, it will give you an error.
+- ***Multiply***: All monthly balances will be multiplied with the number in this column. **Note**: This does not affect initial balance, only monthly balances. E.g. if for a debit or mastercard report type the opposite values are reported in the monthly balance, you can copy the original summary from the monthly report and set `Multiply` to `-1`.
 
 ## balance_monthly (OPTIONAL)
 
