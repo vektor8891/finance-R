@@ -6,3 +6,4 @@ output/
 *.Rdata
 .Rhistory
 .Rproj.user
+.~lock.config.xlsx#
