@@ -1,9 +1,8 @@
-input.xlsx
-output.xlsx
+config.xlsx
 reports/
 output/
 .Rproj.user/
-.RData
-finance.Rdata
+*.RData
+*.Rdata
 .Rhistory
 .Rproj.user
