@@ -136,7 +136,6 @@ check.category.target <- function(dt,  showPairs = F, strictMode = T,
       cat(paste0("WARNING: sum(", catName, ") != ", targetHUF, " HUF!\n",
                  "HINT: to dismiss error set target to ",
                  round(catSumHUF, 2), " HUF\n"))
-      View(dtCat)
       if (strictMode) stop()
     } else if (verbose) {
       cat(paste0("PASS: sum(", catName, ") = ", targetHUF, " HUF\n"))

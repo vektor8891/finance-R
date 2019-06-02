@@ -44,12 +44,16 @@ export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   dt <- modify.dt(dt, currency, folder)
   fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
   wb <- openxlsx::createWorkbook(creator = Sys.getenv("USERNAME"))
-  
-  wb <- pivot.income(dt, wb, showRatio = T, showPnL = T, verbose = verbose)
-  wb <- pivot.income(dt, wb, showCategory = T, showPnL = T, verbose = verbose)
-  wb <- pivot.balance(dt, wb, verbose = verbose)
+
+  ptGrp <- pivot.income(dt, showRatio = T, showPnL = T, verbose = verbose)
+  ptCat <- pivot.income(dt, showCategory = T, showPnL = T, verbose = verbose)
+  ptBal <- pivot.balance(dt, verbose = verbose)
+
+  wb <- export.pt(wb, pt = ptGrp, sheet = "CategoryGroup", verbose = verbose)
+  wb <- export.pt(wb, pt = ptCat, sheet = "Category", verbose = verbose)
+  wb <- export.pt(wb, pt = ptBal, sheet = "Balance", verbose = verbose)
   wb <- export.dt(dt$transactions, wb, "Transactions", verbose = verbose)
-  
+
   openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
   cat("Export DONE.")
 }
@@ -73,7 +77,7 @@ export.dt <- function(dt, wb, sheetName, verbose = F) {
   return(wb)
 }
 
-pivot.balance <- function(dt, wb, cumulative = T ,verbose = F) {
+pivot.balance <- function(dt, cumulative = T ,verbose = F) {
   # Create pivot table for balance sheet
   #
   # Args:
@@ -81,12 +85,11 @@ pivot.balance <- function(dt, wb, cumulative = T ,verbose = F) {
   #     $all: all transactions
   #     $year: year name
   #     $ccy: currency (HUF or USD)
-  #   wb: Excel workbook object
   #   cumulative: use cumulative sum
   #   verbose: print additional information
   #
   # Returns:
-  #   wb: Excel workbook object
+  #   pt: pivot table
   pt <- PivotTable$new()
   pt$theme <- theme
   dt$all$Date <- as.Date(dt$all$Date)
@@ -107,13 +110,11 @@ pivot.balance <- function(dt, wb, cumulative = T ,verbose = F) {
   pt$evaluatePivot()
   cells <- pt$findCells(calculationNames = c("MonthlyCumulativeSum", "MonthlySum"))
   pt$setStyling(cells = cells, declarations = list("xl-value-format" = "#,##0"))
-  sheetName <- paste0("Balance", dt$ccy)
-  wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
-  return(wb)
+  return(pt)
 }
 
 
-pivot.income <- function(dt, wb, showCategory = F, showPnL = F, showRatio = F,
+pivot.income <- function(dt, showCategory = F, showPnL = F, showRatio = F,
                          verbose = F) {
   # Create pivot table for income statement
   #
@@ -122,14 +123,13 @@ pivot.income <- function(dt, wb, showCategory = F, showPnL = F, showRatio = F,
   #     $all: all transactions
   #     $year: year name
   #     $ccy: currency (HUF or USD)
-  #   wb: Excel workbook object
   #   showCategory: show category groups in pivot
   #   showPnL: show total PnL
   #   showRatio: show absolute ratio compared to total income
   #   verbose: print additional information
   #
   # Returns:
-  #   wb: Excel workbook object
+  #   pt: pivot table
   pt <- PivotTable$new()
   pt$theme <- theme
   pt$addData(dt$all[CategoryType != "OTHER"])
@@ -165,10 +165,7 @@ pivot.income <- function(dt, wb, showCategory = F, showPnL = F, showRatio = F,
   }
   cells <- pt$findCells(calculationNames = "MonthlySum")
   pt$setStyling(cells = cells, declarations = list("xl-value-format" = "#,##0"))
-  sheetName <- ifelse(showCategory, paste0("Category", dt$ccy),
-                      paste0("CategoryGroup", dt$ccy))
-  wb <- export.pt(wb, pt = pt, sheet = sheetName, verbose = verbose)
-  return(wb)
+  return(pt)
 }
 
 export.pt <- function(wb, pt, sheet, verbose = F) {
