@@ -3,6 +3,9 @@ library(data.table)
 library(lubridate)
 library(openxlsx)
 library(qdap)
+library(ggplot2)
+library(RColorBrewer)
+library(colorRamps)
 
 theme <- list(
   fontName = "Verdana, Arial",
@@ -44,6 +47,9 @@ export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   dt <- modify.dt(dt, currency, folder)
   fn <- get.fileName(dt, addTimeStamp = addTimeStamp)
   wb <- openxlsx::createWorkbook(creator = Sys.getenv("USERNAME"))
+  
+  fig.costs(dt, verbose = verbose)
+  fig.balance(dt, verbose = verbose)
 
   ptGrp <- pivot.income(dt, showRatio = T, showPnL = T, verbose = verbose)
   ptCat <- pivot.income(dt, showCategory = T, showPnL = T, verbose = verbose)
@@ -57,6 +63,91 @@ export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
   cat("Export DONE.")
 }
+
+fig.costs <- function(dt, threshold = 100, verbose = F) {
+  # Export costs to png file
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: all transactions
+  #     $ccy: currency (HUF or USD)
+  #   threshold: minimum absolute limit for considering costs in a category
+  #   verbose: print additional information
+  
+  # generate pivot table
+  pt <- PivotTable$new()
+  pt$addData(dt$all[CategoryType == "COSTS"])
+  pt$addRowDataGroups("Month", addTotal = FALSE)
+  pt$addRowDataGroups("CategoryGroup", addTotal = FALSE)
+  pt$defineCalculation(calculationName="Amount",
+                       summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
+  pt$evaluatePivot()
+  df <- pt$asTidyDataFrame()
+  df <- df[abs(df$rawValue) >= threshold, ]
+  
+  # create plot
+  colourCount <- length(unique(df$CategoryGroup))
+  getPalette <- colorRampPalette(brewer.pal(9, "Set1"))
+  pl <- ggplot(df, aes(fill=df$CategoryGroup, y=-df$rawValue, x=df$Month)) + 
+    geom_bar(stat="identity")
+  pl + 
+    scale_fill_manual(values = colorRampPalette(brewer.pal(12, "Paired"))(colourCount)) +
+    labs(fill="Category Group", y=paste0("Costs (", dt$ccy, ")"), x="Month")
+  
+  # save results
+  fileName <- paste0(dt$folder, "/costs.png")
+  ggsave(fileName)
+  if (verbose) cat(paste0("Export costs to '", fileName, "'\n"))
+}
+
+
+fig.balance <- function(dt, verbose = F) {
+  # Export costs to png file
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $all: all transactions
+  #     $ccy: currency (HUF or USD)
+  #   threshold: minimum absolute limit for considering costs in a category
+  #   verbose: print additional information
+  
+  # generate pivot table
+  pt <- PivotTable$new()
+  pt$addData(dt$all)
+  pt$addRowDataGroups("AccountGroup", addTotal = FALSE)
+  pt$addRowDataGroups("Month", addTotal = FALSE)
+  cumulativeSum <- function(pt, filters, cell) {
+    # get the month filter
+    filter <- filters$getFilter("Month")
+    if(is.null(filter)||(filter$type=="ALL")||(length(filter$values)>1)) {
+      # there is no filter on Month in this cell
+      newFilter <- PivotFilter$new(pt, variableName="Month", type="NONE")
+      filters$setFilter(newFilter, action="replace")
+    }
+    else {
+      # get the month value and modify the filter
+      month <- filter$values
+      newMonths <- seq(1, month)
+      filter$values <- newMonths
+    }
+  }
+  filterOverrides <- PivotFilterOverrides$new(pt, overrideFunction = cumulativeSum)
+  pt$defineCalculation(calculationName = "Amount", filters = filterOverrides, format = "%.0f",
+                       summariseExpression = paste0("sum(Amount", dt$ccy, ")"))
+  pt$evaluatePivot()
+  df <- pt$asTidyDataFrame()
+  
+  # create plot
+  pl <- ggplot(df, aes(fill=df$AccountGroup, y=df$rawValue, x=df$Month)) + 
+    geom_bar(stat="identity")
+  pl + labs(fill="Account Group", y=paste0("Balance (", dt$ccy, ")"), x="Month")
+  
+  # save results
+  fileName <- paste0(dt$folder, "/balance.png")
+  ggsave(fileName)
+  if (verbose) cat(paste0("Export costs to '", fileName, "'\n"))
+}
+
 
 export.dt <- function(dt, wb, sheetName, verbose = F) {
   # Export results
@@ -200,12 +291,8 @@ get.fileName <- function(dt, addTimeStamp = F) {
   #
   # Returns:
   #   fn: file name
-  if (addTimeStamp) {
-    time <- mgsub(c(" ",":"), c("_","."), as.POSIXlt(Sys.time()))
-    fn <- paste0(dt$folder, "output_", dt$year,"_", dt$ccy, "_", time, ".xlsx")
-  } else {
-    fn <- paste0(dt$folder, "output.xlsx")
-  }
+  time <- ifelse(addTimeStamp, mgsub(c(" ",":"), c("_","."), as.POSIXlt(Sys.time())), "")
+  fn <- paste0(dt$folder, "financial_report_", dt$year,"_", dt$ccy, time, ".xlsx")
   return(fn)
 }
 

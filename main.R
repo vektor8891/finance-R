@@ -26,7 +26,7 @@ strictMode <- T
 config <- "config.xlsx"
 reports <- "reports/"
 output <- "output/"
-Rdata <- "finance.RData"
+Rdata <- "finance1.RData"
 
 if (newRun) {
   dt <- read.all(fn = config, folder = reports, year = year, verbose = verbose)
@@ -38,5 +38,5 @@ if (newRun) {
 }
 
 # dt$all <- dt$all[1:100] # trunk data for testing
-export.all(dt, folder = output, currency = currency, addTimeStamp = T,
+export.all(dt, folder = output, currency = currency, addTimeStamp = F,
            verbose = verbose)
