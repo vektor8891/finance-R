@@ -1,6 +1,6 @@
 library(pivottabler)
 library(data.table)
-library(lubridate)
+library(lubridate) # as.POSIXlt()
 library(openxlsx)
 library(qdap)
 library(ggplot2)
@@ -50,6 +50,8 @@ export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   
   fig.costs(dt, verbose = verbose)
   fig.balance(dt, verbose = verbose)
+  fig.cumulative.balance(dt, account = "HSBC", verbose = verbose)
+  fig.cumulative.balance(dt, account = "HSBC", month = 12, verbose = verbose)
 
   ptGrp <- pivot.income(dt, showRatio = T, showPnL = T, verbose = verbose)
   ptCat <- pivot.income(dt, showCategory = T, showPnL = T, verbose = verbose)
@@ -58,7 +60,8 @@ export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   wb <- export.pt(wb, pt = ptGrp, sheet = "CategoryGroup", verbose = verbose)
   wb <- export.pt(wb, pt = ptCat, sheet = "Category", verbose = verbose)
   wb <- export.pt(wb, pt = ptBal, sheet = "Balance", verbose = verbose)
-  wb <- export.dt(dt$transactions, wb, "Transactions", verbose = verbose)
+  wb <- export.dt(dt$transactions[order(Category, Date), ], wb, "Transactions",
+                  verbose = verbose)
 
   openxlsx::saveWorkbook(wb, file = fn, overwrite = T)
   cat("Export DONE.")
@@ -147,6 +150,57 @@ fig.balance <- function(dt, verbose = F) {
   ggsave(fileName)
   if (verbose) cat(paste0("Export costs to '", fileName, "'\n"))
 }
+
+
+fig.cumulative.balance <- function(dt, account, month = 3, verbose = F) {
+  # Export cumulative balance for Checking/Savings account to png file
+  #
+  # Args:
+  #   dt: list of data.tables
+  #     $transations: all transactions
+  #     $ccy: currency
+  #   account: name of account
+  #   month: last number of months to consider
+  #   verbose: print additional information
+  
+  col <- paste0("Amount", dt$ccy)
+  curMonth <- as.integer(format(Sys.Date(),"%m"))
+  
+  getCumBalance <- function(dt) {
+    dt <- dt[order(Date)][, CumBalance := cumsum(eval(parse(text = col)))]
+    dt <- dt[Month >= curMonth - month]
+    dt$Date <- as.Date(dt$Date, '%Y.%m.%d')
+    dt[, Seconds := as.numeric(as.POSIXct(Date, origin = "1970-01-01"))]
+    dt <- rbind(
+      dt,
+      transform(dt[order(dt$Seconds),],
+                Seconds=Seconds-1,  # required to avoid crazy steps
+                CumBalance=ave(CumBalance, FUN=function(z) c(z[[1]], head(z, -1L)))
+                ))
+    dt[, Date2 := .POSIXct(Seconds)]
+    return(dt)
+  }
+  
+  dtCum1 <- dt$transactions[Account == paste0(account, ".Savings")]
+  dtCum2 <- dt$transactions[Account %in% c(paste0(account, ".Checking"),
+                                           paste0(account, ".Savings"))]
+  dtCum1 <- getCumBalance(dtCum1)
+  dtCum2 <- getCumBalance(dtCum2)
+  
+  pl <- ggplot() + 
+    geom_ribbon(aes(x = Date2, ymin = 0, ymax = CumBalance, fill="Checking & Savings"), data = dtCum2,
+                alpha=0.5) +
+    geom_ribbon(aes(x = Date2, ymin = 0, ymax = CumBalance, fill="Savings"), data = dtCum1,
+                alpha=0.5)
+  pl + labs(y=paste0(account, " balance (", dt$ccy, ")"), x="Date") +
+    theme(legend.position="top", legend.spacing.x = unit(0.1, 'cm')) +
+    theme(legend.title=element_blank())
+  
+  fileName <- paste0(dt$folder, "/", account, "_", month, "m.png")
+  ggsave(fileName)
+  if (verbose) cat(paste0("Export cumulative balance to '", fileName, "'\n"))
+}
+
 
 
 export.dt <- function(dt, wb, sheetName, verbose = F) {

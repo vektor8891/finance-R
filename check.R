@@ -245,6 +245,7 @@ check.latest <- function(dt, strictMode = T, verbose = F) {
     dtAcc <- dt$all[Account == account]
     latest <- ifelse(nrow(dtAcc) > 0, max(dtAcc$Date), paste0(dt$year, ".01.01"))
     threshold <- dtThreshold[row, NoTransactionAfter]
+    # cat(account, latest, threshold)
     if (as.Date(latest, format = "%Y.%m.%d") >
         as.Date(threshold, format = "%Y.%m.%d")) {
       if (verbose) cat("FAIL:", account, ":", latest, "(latest) >",

@@ -8,6 +8,7 @@
 
 # Run all: Ctrl + Alt + R
 # TODO: check monthly balance
+# find error: traceback()
 
 
 Sys.setlocale("LC_TIME", if (.Platform$OS.type == "unix") "C" else "English")
