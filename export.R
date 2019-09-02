@@ -52,7 +52,7 @@ export.all <- function(dt, folder, currency, addTimeStamp = F, verbose = F) {
   fig.balance(dt, verbose = verbose)
   fig.cumulative.balance(dt, account = "HSBC", verbose = verbose)
   fig.cumulative.balance(dt, account = "HSBC", month = 12, verbose = verbose)
-
+  
   ptGrp <- pivot.income(dt, showRatio = T, showPnL = T, verbose = verbose)
   ptCat <- pivot.income(dt, showCategory = T, showPnL = T, verbose = verbose)
   ptBal <- pivot.balance(dt, verbose = verbose)
@@ -187,14 +187,18 @@ fig.cumulative.balance <- function(dt, account, month = 3, verbose = F) {
   dtCum1 <- getCumBalance(dtCum1)
   dtCum2 <- getCumBalance(dtCum2)
   
+  maxBal <- 10^ceiling(log10(max(dtCum2$CumBalance)))
+  
   pl <- ggplot() + 
     geom_ribbon(aes(x = Date2, ymin = 0, ymax = CumBalance, fill="Checking & Savings"), data = dtCum2,
                 alpha=0.5) +
     geom_ribbon(aes(x = Date2, ymin = 0, ymax = CumBalance, fill="Savings"), data = dtCum1,
                 alpha=0.5)
-  pl + labs(y=paste0(account, " balance (", dt$ccy, ")"), x="Date") +
-    theme(legend.position="top", legend.spacing.x = unit(0.1, 'cm')) +
-    theme(legend.title=element_blank())
+  pl + labs(y = paste0(account, " balance (", dt$ccy, ")"), x = "Date") +
+    theme(legend.position = "top", legend.spacing.x = unit(0.1, 'cm')) +
+    theme(legend.title = element_blank()) +
+    scale_y_continuous(breaks = seq(0, maxBal, 1000),
+                       minor_breaks = seq(0, maxBal, 500))
   
   fileName <- paste0(dt$folder, "/", account, "_", month, "m.png")
   ggsave(fileName)
