@@ -219,7 +219,7 @@ check.patterns <- function(dt, strictMode = T, verbose = F) {
   #   dt: data.table for patterns
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
-  unused <- dt[Category != "Adjustment" & Match == 0]
+  unused <- dt[Category != "Adjustment" & Match == 0 & Used != "N"]
   if (nrow(unused) > 0) {
     if (verbose) cat("FAIL: unused patterns found:\n")
     print(unused)

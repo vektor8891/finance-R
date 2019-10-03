@@ -144,6 +144,7 @@ In this sheet you can define which patterns belong to a given category. For thos
 - ***Category***: Name of the category which will be assigned to the transaction.
 - ***Pattern***: Pattern text. If found in the _Details_ field, the transaction will be assigned to _Category_.
 - ***Note***: Optional parameter. Here you can add note to remember why you assigned a specific category for a given pattern. This can be useful if the reason is not trivial.
+- ***Used***: Optional parameter. By default the program throws an error if it finds an unused pattern and requires the user to remove from the list. This can be overwritten by setting this parameter to `N` which means the pattern will be skipped for the check.
 
 ## balance_initial
 

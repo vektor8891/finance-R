@@ -69,7 +69,7 @@ add.columns <- function(d, type = "normal", multiply = FALSE) {
     d[is.na(d)] <- 0
     d[, Amount := Credit - Debit]
     d[, Date := sapply(Date, function(x) {
-      format(as.POSIXct(x, format = "%m/%d/%Y"), format = "%Y.%m.%d")
+      format(as.POSIXct(x, format = "%Y-%m-%d"), format = "%Y.%m.%d")
     })]
     d[, Category := NULL]
   } else if (grepl("HSBC", type)) {
