@@ -3,6 +3,7 @@ library(readxl)
 library(qdap)
 library(xlsx)
 library(gsubfn)
+library(tictoc)
 
 add.category <- function(patterns, d, verbose = F) {
   # Add category for transactions based on patterns

@@ -11,6 +11,7 @@
 # find error: traceback()
 
 
+
 Sys.setlocale("LC_TIME", if (.Platform$OS.type == "unix") "C" else "English")
 
 source("read.R")
@@ -29,6 +30,7 @@ reports <- "reports/"
 output <- "output/"
 Rdata <- "finance1.RData"
 
+tic("total")
 if (newRun) {
   dt <- read.all(fn = config, folder = reports, year = year, verbose = verbose)
   dt <- summary.all(dt)

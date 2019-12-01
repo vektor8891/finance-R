@@ -91,7 +91,8 @@ fig.costs <- function(dt, threshold = 100, verbose = F) {
   # create plot
   colourCount <- length(unique(df$CategoryGroup))
   getPalette <- colorRampPalette(brewer.pal(9, "Set1"))
-  pl <- ggplot(df, aes(fill=df$CategoryGroup, y=-df$rawValue, x=df$Month)) + 
+  df$Month <- as.numeric(as.character(df$Month))
+  pl <- ggplot(df, aes(fill=df$CategoryGroup, y=-df$rawValue, x=factor(df$Month))) + 
     geom_bar(stat="identity")
   pl + 
     scale_fill_manual(values = colorRampPalette(brewer.pal(12, "Paired"))(colourCount)) +
@@ -141,7 +142,8 @@ fig.balance <- function(dt, verbose = F) {
   df <- pt$asTidyDataFrame()
   
   # create plot
-  pl <- ggplot(df, aes(fill=df$AccountGroup, y=df$rawValue, x=df$Month)) + 
+  df$Month <- as.numeric(as.character(df$Month))
+  pl <- ggplot(df, aes(fill=df$AccountGroup, y=df$rawValue, x=factor(df$Month))) + 
     geom_bar(stat="identity")
   pl + labs(fill="Account Group", y=paste0("Balance (", dt$ccy, ")"), x="Month")
   
