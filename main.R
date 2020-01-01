@@ -10,14 +10,12 @@
 # TODO: check monthly balance
 # find error: traceback()
 
-
-
 Sys.setlocale("LC_TIME", if (.Platform$OS.type == "unix") "C" else "English")
 
-source("read.R")
-source("check.R")
-source("summary.R")
-source("export.R")
+source("functions/read.R")
+source("functions/check.R")
+source("functions/summary.R")
+source("functions/export.R")
 
 year <- 2019
 currency <- "USD"
@@ -25,12 +23,11 @@ verbose <- F
 
 newRun <- T
 strictMode <- T
-config <- "config.xlsx"
-reports <- "reports/"
-output <- "output/"
+config <- paste0("config/config_", year, ".xlsx")
+reports <- paste0("reports/", year, "/")
+output <- paste0("output/", year, "/")
 Rdata <- "finance1.RData"
 
-tic("total")
 if (newRun) {
   dt <- read.all(fn = config, folder = reports, year = year, verbose = verbose)
   dt <- summary.all(dt)

@@ -1,4 +1,4 @@
-source("read.R")
+source("functions/read.R")
 
 add.adjustment <- function(dt) {
   # Add adjustment to transactions

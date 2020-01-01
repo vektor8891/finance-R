@@ -46,7 +46,7 @@ add.columns <- function(d, type = "normal", multiply = FALSE) {
   #
   # Returns:
   #   d: updated data.table
-  if (type == "cash") {
+  if (type == "bluecoins") {
     d[, Amount := as.numeric(sub(",", ".", Amount, fixed = TRUE))]
   } else if (type == "unicredit") {
     d[, Details := paste0(Partner, " | ", PartnerAccount, " | ",  Transaction)]
