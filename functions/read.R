@@ -25,7 +25,7 @@ add.category <- function(patterns, d, verbose = F) {
       if (verbose) cat(paste0(date, ": ", huf, " HUF (" ,detail, ")\n"))
       list[categ, pattern] <- get.pattern(patterns, detail, verbose = verbose)
       if (!is.null(categ)) {
-        #if(is.na(categ)) browser() # missing category
+        # if(is.na(categ)) browser() # missing category
         d[row, Category := categ]
         patterns[Pattern %in% pattern, Match := Match + 1]
         next
@@ -46,26 +46,13 @@ add.columns <- function(d, type = "normal", multiply = FALSE) {
   #
   # Returns:
   #   d: updated data.table
-  if (type == "bluecoins") {
-    d[, Amount := as.numeric(sub(",", ".", Amount, fixed = TRUE))]
+  if (type == "cash") {
+    d[, Account := "Cash"]
   } else if (type == "unicredit") {
     d[, Details := paste0(Partner, " | ", PartnerAccount, " | ",  Transaction)]
     d[, Amount := sapply(Amount, function(x) 
       as.numeric(mgsub(c(",", "\u00A0", " HUF"), c(".", "", ""), x))
     )]
-  } else if (type == "egeszsegpenztar") {
-    d[, Details := paste0(Partner, " | ", Type)]
-    dtTransfer = d[Credit != 0]
-    dtTransfer[, Details := 'Bank fee']
-    dtTransfer[, Credit := CreditFinal - Credit]
-    d <- merge.dt(d, dtTransfer)
-    d[, Amount := Credit + Debit]
-  } else if (grepl("53", type)) {
-    names(d) <- "Details"
-    d[, Date := paste0(2019, ".", gsub("/", ".", substr(Details, 1, 5)))]
-    d[, Amount := sapply(Details, function(x) {
-      as.numeric(gsub(",", "", strsplit(x, " ")[[1]][2]))
-    })]
   } else if (type == "capital_one") {
     d[is.na(d)] <- 0
     d[, Amount := Credit - Debit]
@@ -79,11 +66,6 @@ add.columns <- function(d, type = "normal", multiply = FALSE) {
       format(as.POSIXct(x, format = "%m/%d/%Y"), format = "%Y.%m.%d")
     })]
     d[, Amount := as.numeric(sub(",", "", AmountRaw))]
-  } else if (type == "adjust") {
-    d[, Amount := Adjustment]
-    d[, Details := "Adjustment"]
-    d[, Day := ifelse(is.na(Day), 1, Day)]
-    d$Date <- sprintf("%4d.%02d.%02d", d$Year, d$Month, d$Day)
   }
   if (!is.na(multiply)) d$Amount <- d$Amount * multiply
   return(d)
@@ -166,7 +148,7 @@ get.pattern <- function(patternData, detail, verbose = F) {
   category <- unique(catPatternAll)
   if (length(category) > 1) {
     cat(paste0("\nMultiple match: '", names(matchResults), "' in\n", detail))
-    stop()
+    browser()
   } else if (length(category) == 1) {
     if (verbose) cat(category, "based on", pattern, "\n")
   }
@@ -246,7 +228,7 @@ read.file <- function(fn, folder = "", dec = ".", encoding = "UTF-8",
     fileType <- unlist(strsplit(fn, "[.]"))[2]
     if (fileType == "csv") {
       hdr <- ifelse(is.null(header), "auto", as.logical(header))
-      d <- fread(fn, dec = dec, encoding = encoding, sep = sep, header = hdr)
+      d <- fread(fn, dec=dec, encoding=encoding, sep=sep, header=hdr, fill=TRUE)
     } else if (fileType %in% c("xlsx", "xls")) {
       d <- as.data.table(xlsx::read.xlsx(fn, 1, encoding = encoding))
     } else {
@@ -281,9 +263,6 @@ read.input <- function(dt, fn, verbose = F) {
   dt$fx <- setNames(fxRates$FXRate, fxRates$Currency)
   dt$monthlyBalance <- read.dt(fn, sheet = "balance_monthly")
   dt$initBalance <- read.dt(fn, sheet = "balance_initial")
-  dt$target <- read.dt(fn, sheet = "target_categories")
-  dt$target[, TargetHUF := Target * dt$fx[Currency]]
-  dt$targetHUF <- setNames(dt$target$TargetHUF, dt$target$Category)
   dt$notes <- read.dt(fn, sheet = "cash_inventory")
   return(dt)
 }

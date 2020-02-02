@@ -6,7 +6,7 @@
 # Year: 2019
 # Licence: MIT
 
-# Run all: Ctrl + Alt + R
+  # Run all: Ctrl + Alt + R
 # TODO: check monthly balance
 # find error: traceback()
 
@@ -17,7 +17,7 @@ source("functions/check.R")
 source("functions/summary.R")
 source("functions/export.R")
 
-year <- 2019
+year <- 2020
 currency <- "USD"
 verbose <- F
 

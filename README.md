@@ -55,7 +55,6 @@ This is done by the `summary.all(dt)` function. In this step the program:
 
 1. adds manual adjustments to the transactions
 1. calculates the total USD and HUF value of the initial balance and the notes & coins
-1. adds extra rows for categories that are treated as a separate account.
 
 ## Step 3) Check
 
@@ -134,8 +133,6 @@ In this sheet you can define category types, category groups and categories for 
 - ***CategoryType***: Category type (recommended values: `COSTS` and `INCOME` but it can be customized).
 - ***CategoryGroup***: Category group (e.g. `Transportation` or `Communication`).
 - ***Category***: Category name (e.g. `Public transportation` or `Telephone`).
-- ***IsAccount***: Optional parameter. If set to `Y`, this category will be treated as a separate account. This means that all the transactions that has this category will be duplicated and for the duplicates the _Account_ parameter will be set to the category name. This can be useful for CDs (certificate of deposits). Using this option the CD amount can be treated as a separate account.
-- ***Replace***: Optional parameter. Only used if _IsAccount_ is set to `Y`. If not empty, the _Category_ field for all the transactions under this category (both the original and the duplicated ones) will be set to this value. E.g. in case of CDs, this can be set to `Transfer`.
 
 ## patterns
 
@@ -171,18 +168,6 @@ In this sheet you can add monthly balances for accounts. This will be used to ch
 - ***Adjustment***: Manual adjustment to avoid error (initial balance and transactions will be adjusted with this value and compared with _Balance_ afterwards). **Note**: Adjustmens will appear in a separate category in the final reports.
 - ***Day***: Optional parameter. If the balance value is defined not for the whole month but e.g. until the 15th day, you can write here `15` and the program will only add up transactions before this date.
 - ***Duplicates***: Number of duplicates for given _Account_ and given _Month_. By default, no duplicates are allowed among the transactions. If there are some, they must be noted here, otherwise the program will give an error. E.g. if there are 2 transactions with exactly the same values, you need to write `1` here (because only one of them is duplicate). **Note**: If there are no duplicates, this parameter is optional.
-
-## target_categories (OPTIONAL)
-
-In this sheet you set target value for a given category. The program will check if the total value of the transactions under the category match with the target value and give an error if not. The target can be manually adjusted to avoid error.
-
-**Note**: This feature can be useful for categories like `Transfer`, `Deposit` or `Withdrawal` which in ideal case should be `0` in total (since they will be double counted with different signs: e.g. for \$100 deposit will appear with a negative sign among the `Cash` transactions and with a positive sign among the `Bank` transactions).
-
-The column names are the following:
-
-- ***Category***: Category name. Must match with _Category_ in **income_categories**.
-- ***Target***: Target value.
-- ***Currency***: Currency of target value.
 
 # Contact
 

@@ -12,7 +12,6 @@ check.all <- function(dt, showPairs = F, strictMode = T, verbose = F) {
   check.patterns(dt$patterns, strictMode = strictMode, verbose = verbose)
   check.cash(dt, strictMode = strictMode, verbose = verbose)
   check.balance(dt, strictMode = strictMode, verbose = verbose)
-  check.category.target(dt, strictMode = F, verbose = verbose)
   check.duplicates(dt, strictMode = strictMode, verbose = verbose)
   check.latest(dt, strictMode = strictMode, verbose = verbose)
   check.frequency(dt, strictMode = strictMode, verbose = verbose)
@@ -113,36 +112,6 @@ check.cash <- function(dt, strictMode = T, verbose = F) {
                           adjustHUF, "HUF)\n")
 }
 
-check.category.target <- function(dt,  showPairs = F, strictMode = T,
-                           verbose = F) {
-  # Check if transactions for given category match target
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $all: all transactions
-  #     $target: target amounts for each categories
-  #   showPairs: if TRUE, shows all transactions if no match. if FALSE, shows
-  #     only those transactions where that have no opposite transaction
-  #   strictMode: if check fails throws error if TRUE and warning if FALSE
-  #   verbose: print additional information
-  for (row in 1:nrow(dt$target)) {
-    catName <- dt$target[row, Category]
-    targetHUF <- dt$target[row, Target * dt$fx[Currency]]
-    dtCat <- dt$all[Category == catName]
-    dtCat <- find.pairs(dtCat, verbose = F)
-    catSumHUF <- sum(dtCat[, AmountHUF])
-    diffHUF <- catSumHUF - targetHUF
-    if (abs(diffHUF) > 0.01) {
-      cat(paste0("WARNING: sum(", catName, ") != ", targetHUF, " HUF!\n",
-                 "HINT: to dismiss error set target to ",
-                 round(catSumHUF, 2), " HUF\n"))
-      if (strictMode) stop()
-    } else if (verbose) {
-      cat(paste0("PASS: sum(", catName, ") = ", targetHUF, " HUF\n"))
-    }
-  }
-}
-
 check.duplicates <- function(dt, strictMode = T, verbose = F) {
   # Check for duplicates in transactions
   #
@@ -240,20 +209,22 @@ check.latest <- function(dt, strictMode = T, verbose = F) {
   #   strictMode: if check fails throws error if TRUE and warning if FALSE
   #   verbose: print additional information
   dtThreshold <- dt$initBalance[!is.na(NoTransactionAfter)]
-  for (row in 1:nrow(dtThreshold)) {
-    account <- dtThreshold[row, Account]
-    dtAcc <- dt$all[Account == account]
-    latest <- ifelse(nrow(dtAcc) > 0, max(dtAcc$Date), paste0(dt$year, ".01.01"))
-    threshold <- dtThreshold[row, NoTransactionAfter]
-    # cat(account, latest, threshold)
-    if (as.Date(latest, format = "%Y.%m.%d") >
-        as.Date(threshold, format = "%Y.%m.%d")) {
-      if (verbose) cat("FAIL:", account, ":", latest, "(latest) >",
-                       threshold, "\n")
-      if (strictMode) stop()
-    } else {
-      if (verbose) cat("PASS:", account, ":", latest, "(latest) <=",
-                       threshold, "\n")    }
+  if (nrow(dtThreshold) > 0) {
+    for (row in 1:nrow(dtThreshold)) {
+      account <- dtThreshold[row, Account]
+      dtAcc <- dt$all[Account == account]
+      latest <- ifelse(nrow(dtAcc) > 0, max(dtAcc$Date), paste0(dt$year, ".01.01"))
+      threshold <- dtThreshold[row, NoTransactionAfter]
+      # cat(account, latest, threshold)
+      if (as.Date(latest, format = "%Y.%m.%d") >
+          as.Date(threshold, format = "%Y.%m.%d")) {
+        if (verbose) cat("FAIL:", account, ":", latest, "(latest) >",
+                         threshold, "\n")
+        if (strictMode) stop()
+      } else {
+        if (verbose) cat("PASS:", account, ":", latest, "(latest) <=",
+                         threshold, "\n")    }
+    }
   }
 }
 

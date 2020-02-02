@@ -12,36 +12,12 @@ add.adjustment <- function(dt) {
   #   dt: list of data.tables
   #     $all: all transactions with adjustment
   d <- dt$monthlyBalance[Adjustment != 0]
-  d$Year <- dt$year
-  d <- add.columns(d, type = "adjust")
-  d$Amount <- d$Adjustment
-  list[d, ] <- finalize(dt, d)
-  dt$all <- merge.dt(dt$all, d, "adjust")
-  return(dt)
-}
-
-add.extra.rows <- function(dt) {
-  # Add extra rows to transactions
-  #
-  # - Add extra rows for category "Deposit" in "Unicredit.Saving1"
-  #
-  # Args:
-  #   dt: list of data.tables
-  #
-  # Returns:
-  #   dt: list of data.tables
-  #     $all: transactions with extra rows
-  cat <- dt$income[IsAccount == "Y"]
-  for (i in 1:nrow(cat)) {
-    d <- dt$all[Category == cat[i, Category]]
-    dt$all[Category == cat[i, Category], Category := cat[i, Replace]]
-    setkeyv(dt$all, cols = colnames(dt$all))
-    d$Account <- cat[i, Category]
-    d$Category <- cat[i, Replace]
-    d$Amount <- d$Amount * -1
-    d$AmountHUF <- d$AmountHUF * -1
-    d$AmountUSD <- d$AmountUSD * -1
-    dt$all <- merge.dt(dt$all, d, "extra rows")
+  if (nrow(d) > 0) {
+    d$Year <- dt$year
+    d <- add.columns(d, type = "adjust")
+    d$Amount <- d$Adjustment
+    list[d, ] <- finalize(dt, d)
+    dt$all <- merge.dt(dt$all, d, "adjust")
   }
   return(dt)
 }
@@ -92,6 +68,5 @@ summary.all <- function(dt) {
   dt <- add.adjustment(dt)
   dt <- balance.summary(dt)
   dt <- cash.summary(dt)
-  dt <- add.extra.rows(dt)
   return(dt)
 }
