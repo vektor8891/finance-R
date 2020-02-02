@@ -189,7 +189,15 @@ fig.cumulative.balance <- function(dt, account, month = 3, verbose = F) {
   dtCum1 <- getCumBalance(dtCum1)
   dtCum2 <- getCumBalance(dtCum2)
   
-  maxBal <- 10^ceiling(log10(max(dtCum2$CumBalance)))
+  # add initial balance
+  savingsInitBal <- dt$all[Account == paste0(account, ".Savings") &
+                            Category == "Initial balance"]$AmountUSD
+  checkingInitBal <- dt$all[Account == paste0(account, ".Checking") &
+                            Category == "Initial balance"]$AmountUSD
+  dtCum1$CumBalance <- dtCum1$CumBalance + savingsInitBal
+  dtCum2$CumBalance <- dtCum2$CumBalance + checkingInitBal + savingsInitBal
+  
+  maxBal <- 10^ceiling(log10(max(dtCum2$CumBalance, 1)))
   
   pl <- ggplot() + 
     geom_ribbon(aes(x = Date2, ymin = 0, ymax = CumBalance, fill="Checking & Savings"), data = dtCum2,
@@ -376,7 +384,6 @@ modify.dt <- function(dt, ccy, folder) {
   dt$transactions <- dt$all
   # add extra rows
   dt <- add.initial.balance(dt)
-  dt <- add.duplicated(dt)
   # merge transactions with category & account types
   dt$all <- merge(dt$all, dt$income, by = "Category", all.x = T)
   dt$all <- merge(dt$all, dt$initBalance, by = "Account", all.x = T)
@@ -416,27 +423,5 @@ add.initial.balance <- function(dt) {
                            "Initial balance")]
   list[d, ] <- finalize(dt, d)
   dt$all <- merge.dt(dt$all, d, name = "Initial balance")
-  return(dt)
-}
-
-add.duplicated <- function(dt) {
-  # Duplicate transactions where category is separate account
-  #
-  # Args:
-  #   dt: list of data.tables
-  #     $all: transactions
-  #     $year: year
-  #
-  # Returns:
-  #   dt: list of data.tables
-  #     $all: all transactions with initial balance
-  d <- dt$all[Category %in% dt$initBalance$Account]
-  if (nrow(d) > 0) {
-    d[, c("Account", "Amount", "AmountHUF", "AmountUSD", "Category", "Details")
-      := list(Category, -Amount, -AmountHUF, -AmountUSD, "Duplicated",
-              "Duplicated (category is separate account)")]
-    list[d, ] <- finalize(dt, d)
-    dt$all <- merge.dt(dt$all, d, name = "Duplicated")
-  }
   return(dt)
 }
