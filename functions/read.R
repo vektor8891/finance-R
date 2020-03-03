@@ -60,6 +60,9 @@ add.columns <- function(d, type = "normal", multiply = FALSE) {
       format(as.POSIXct(x, format = "%Y-%m-%d"), format = "%Y.%m.%d")
     })]
     d[, Category := NULL]
+  } else if (type == "adjust") {
+    d[, Details := "Adjustment"]
+    d[, Date := strftime(ISOdate(dt$year, Month, Day), format="%Y.%m.%d")]
   } else if (grepl("HSBC", type)) {
     # browser()
     d[, Date := sapply(DateRaw, function(x) {
